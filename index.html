@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bioniks ERP</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0b2a5b">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Bioniks ERP">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+
+<style>
+:root{--navy:#0b2a5b;--navy2:#143d85;--bg:#f2f5fa;--card:#fff;--tx:#14213d;--mut:#64708a;--ok:#1a8a4a;--warn:#c77700;--bad:#c0392b;--bd:#dde3ee;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}body{margin:0;font-family:-apple-system,system-ui,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--tx);background-color:#f2f5fa}
+header{background:var(--navy);color:#fff;padding:14px 16px;position:sticky;top:env(safe-area-inset-top,0px);z-index:5;display:flex;justify-content:space-between;align-items:center}
+header b{font-size:18px}header small{opacity:.75;display:block;font-size:12px}
+main{padding:14px;max-width:760px;margin:auto;padding-bottom:90px}
+nav{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--bd);display:flex;overflow-x:auto;padding-bottom:env(safe-area-inset-bottom,0px)}
+nav button{flex:0 0 auto;min-width:76px;border:0;background:none;padding:12px 2px;font-size:12px;color:var(--mut);min-height:52px}
+nav button.on{color:var(--navy);font-weight:700;border-top:3px solid var(--navy)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px;margin-bottom:12px}
+.tile small{color:var(--mut);font-size:12px}.tile div{font-size:20px;font-weight:700;margin-top:4px;color:var(--navy)}
+h2{font-size:16px;margin:4px 0 10px;color:var(--navy)}
+label{display:block;font-size:13px;color:var(--mut);margin:10px 0 4px}
+input,select,textarea{width:100%;padding:13px;border:1px solid var(--bd);border-radius:10px;font-size:16px;background:#fff;color:var(--tx)}
+.btn{display:block;width:100%;padding:14px;border:0;border-radius:10px;background:var(--navy2);color:#fff;font-size:16px;font-weight:600;margin-top:12px;min-height:48px}
+.btn.alt{background:#fff;color:var(--navy2);border:1px solid var(--navy2)}
+.alert{padding:12px;border-radius:10px;margin-bottom:10px;font-size:14px;background:#fff4e0;color:#7a4a00;border:1px solid #f0d49a}
+.alert.ok{background:#e6f6ec;color:#14633a;border-color:#a9dcbd}.alert.bad{background:#fdeceb;color:#8e2a20;border-color:#f0b5af}
+table{width:100%;border-collapse:collapse;font-size:14px}td,th{padding:8px 4px;border-bottom:1px solid var(--bd);text-align:left}
+.login{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#0b2a5b,#1a4fa3);padding:20px}
+.login .card{width:100%;max-width:380px;padding:24px}.login h1{margin:0;color:var(--navy);font-size:24px}.login p{color:var(--mut);margin:4px 0 14px}
+.scroll{overflow-x:auto}@media print{header,nav,.noprint{display:none!important}main{padding:0}body{background:#fff}.card{border:0}}
+</style></head><body>
+<div id="app"></div>
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const STORES=['settings','counters','audit','backups','customers','suppliers','products','machines','invoices','purchases','rentals','payments','expenses','services','vouchers','accounts','stock','units'];
+const DOCS=[['sales_invoice','Sales invoice','INV'],['purchase_invoice','Purchase invoice','PUR'],['rental_agreement','Rental agreement','RA'],['rental_invoice','Rental invoice','RINV'],['payment_receipt','Payment receipt','RCT'],['payment_voucher','Payment voucher','PV'],['credit_note','Credit note','CN'],['debit_note','Debit note','DN'],['service_order','Service order','SRV'],['journal','Journal voucher','JV'],['contra','Contra voucher','CV'],['receipt_voucher','Receipt voucher','RV'],['grn','Goods receipt note','GRN'],['delivery_note','Delivery note','DLV'],['receipt_note','Machine receipt note','RN'],['warranty_dn','Delivery note to company','WDN']];
+const APP_VERSION='1.4.0',DB_VERSION=3;
+let db;
+function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open('bioniks_erp',DB_VERSION);
+r.onupgradeneeded=e=>{const d=r.result;STORES.forEach(n=>{if(!d.objectStoreNames.contains(n)){d.createObjectStore(n,n==='settings'||n==='counters'?{keyPath:'key'}:n==='audit'||n==='backups'?{keyPath:'id',autoIncrement:true}:{keyPath:'id'})}})};
+r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
+const store=(n,m='readonly')=>db.transaction(n,m).objectStore(n);
+const req=r=>new Promise((res,rej)=>{r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)});
+const getOne=(n,k)=>req(store(n).get(k));
+const putOne=(n,v)=>req(store(n,'readwrite').put(v));
+const getAll=n=>req(store(n).getAll());
+async function audit(action,detail){await putOne('audit',{at:new Date().toISOString(),action,detail})}
+async function sha(t){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(t));return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}
+const money=n=>'₹'+(Number(n)||0).toLocaleString('en-IN',{maximumFractionDigits:2});
+let tab='dash',unlocked=false,idleT;
+
+async function boot(){
+ try{db=await openDB()}catch(e){$('#app').innerHTML='<div class="login"><div class="card"><h2>Storage unavailable</h2><p>This browser blocked offline storage (IndexedDB). Open the app in normal (non-private) Safari.</p></div></div>';return}
+ for(const [k,,p] of DOCS){if(!await getOne('counters',k))await putOne('counters',{key:k,prefix:p+'-',next:1,padding:4})}
+ if(!await getOne('settings','company'))await putOne('settings',{key:'company',name:'Bioniks Medical Equipments',address:'Vadakara, Kerala, India',gstin:'',phone:'',state:'Kerala',pinHash:null,fy:'04'});
+ login()}
+
+async function login(){
+ const c=await getOne('settings','company');const setup=!c.pinHash;
+ $('#app').innerHTML=`<div class="login"><div class="card"><h1>BIONIKS ERP</h1><p>${esc(c.name)}</p>
+ ${setup?'<div class="alert">First use: create a PIN (4–8 digits). There is no PIN recovery, so keep a backup file.</div>':''}
+ <label>${setup?'Create PIN':'Enter PIN'}</label><input id="pin" type="password" inputmode="numeric" autocomplete="off" maxlength="8">
+ ${setup?'<label>Confirm PIN</label><input id="pin2" type="password" inputmode="numeric" maxlength="8">':''}
+ <div id="err" class="alert bad" style="display:none;margin-top:10px"></div>
+ <button class="btn" id="go">${setup?'Create PIN & start':'Unlock'}</button></div></div>`;
+ const err=m=>{$('#err').textContent=m;$('#err').style.display='block'};
+ $('#go').onclick=async()=>{const p=$('#pin').value;
+  if(!/^\d{4,8}$/.test(p))return err('PIN must be 4 to 8 digits.');
+  if(setup){if(p!==$('#pin2').value)return err('PINs do not match.');c.pinHash=await sha('bioniks:'+p);await putOne('settings',c);await audit('PIN_CREATED','')}
+  else if(await sha('bioniks:'+p)!==c.pinHash){await audit('LOGIN_FAILED','');return err('Wrong PIN.')}
+  unlocked=true;await audit('LOGIN','');autoSnapshot();shell()}}
+
+function resetIdle(){clearTimeout(idleT);if(unlocked)idleT=setTimeout(()=>{unlocked=false;login()},5*60*1000)}
+['click','touchstart','keydown'].forEach(e=>document.addEventListener(e,resetIdle,{passive:true}));
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&unlocked){unlocked=false;login()}});
+
+function shell(){resetIdle();
+ $('#app').innerHTML=`<header><div><b>BIONIKS ERP</b><small id="cn"></small></div><button class="btn alt" style="width:auto;margin:0;padding:8px 12px;min-height:36px;font-size:14px" id="lock">Lock</button></header><main id="main"></main>
+ <nav>${[['dash','Home'],['cust','Customers'],['prod','Products'],['sales','Sales'],['rent','Rentals'],['mach','Machines'],['acct','Accounts'],['exp','Expenses'],['svc','Service'],['rep','Reports'],['ser','Serials'],['stock','Stock'],['buy','Purchases'],['sup','Suppliers'],['company','Company'],['num','Numbers'],['bak','Backup']].map(([k,l])=>`<button data-t="${k}">${l}</button>`).join('')}</nav>`;
+ getOne('settings','company').then(c=>$('#cn').textContent=c.name);
+ $('#lock').onclick=()=>{unlocked=false;login()};
+ document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{tab=b.dataset.t;render()});render()}
+
+async function render(){
+ document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t===tab));
+ const o=$('#main'),m=document.createElement('main');m.id='main';o.replaceWith(m);({dash,cust:customers,prod:products,sales:salesView,rent:rentalsView,mach:machinesView,acct:acctView,exp:expensesView,svc:servicesView,rep:reportsView,ser:serialView,stock:stockView,buy:purchases,sup:suppliers,company,num,bak:backupView})[tab](m)}
+
+async function dash(m){
+ const [inv,rent,mach,exp,cust,pur,sup]=await Promise.all(['invoices','rentals','machines','expenses','customers','purchases','suppliers'].map(getAll));
+ const today=new Date().toISOString().slice(0,10),mon=today.slice(0,7);
+ const live=inv.filter(i=>i.status!=='cancelled'&&i.type!=='credit'),sum=a=>a.reduce((s,x)=>s+(+x.total||0),0);
+ const out=live.reduce((s,i)=>s+Math.max(0,(+i.total||0)-(+i.paid||0)-(+i.credited||0)),0);
+ const supDue=pur.filter(p=>p.status!=='cancelled').reduce((s,p)=>s+Math.max(0,(+p.total||0)-(+p.paid||0)),0);
+ const tiles=[['Today’s sales',money(sum(live.filter(i=>i.date===today)))],['Monthly sales',money(sum(live.filter(i=>(i.date||'').startsWith(mon))))],
+ ['Customer outstanding',money(out)],['Supplier dues',money(supDue)],
+ ['Active rentals',rent.filter(r=>r.status==='active').length],['Available machines',mach.filter(x=>x.status==='available').length],
+ ['Monthly expenses',money(sum(exp.filter(e=>e.status!=='cancelled'&&(e.date||'').startsWith(mon))))],['Customers',cust.length],...(await stockSummary()).tiles,...(await rentSummary()),...(await acctSummary()),...(await svcSummary())];
+ const xtra=await dashExtras();const last=(await getAll('backups')).filter(b=>b.kind==='export').pop();
+ const due=!last||(Date.now()-new Date(last.at))>864e5;
+ m.innerHTML=(due?'<div class="alert">⚠ Daily backup due. '+(last?'Last backup: '+new Date(last.at).toLocaleString():'No backup made yet.')+' Go to Backup.</div>':'<div class="alert ok">Backup is up to date.</div>')+
+ `<div class="grid">${tiles.map(t=>`<div class="card tile"><small>${t[0]}</small><div>${t[1]}</div></div>`).join('')}</div>
+ <div class="card"><h2>Last 6 months</h2>${xtra}<h2 style="margin-top:14px">Status</h2><p style="margin:0;color:var(--mut);font-size:14px">All figures are calculated from your stored records.</p></div>`}
+
+async function company(m){
+ const c=await getOne('settings','company');
+ m.innerHTML=`<div class="card"><h2>Company settings</h2>
+ ${[['name','Business name'],['address','Address'],['gstin','GSTIN (leave blank until you enter your real one)'],['phone','Phone'],['state','State']].map(([k,l])=>`<label>${l}</label><input id="f_${k}" value="${esc(c[k])}">`).join('')}
+ <label>Financial year starts in</label><select id="f_fy">${['01','02','03','04','05','06','07','08','09','10','11','12'].map(x=>`<option value="${x}" ${c.fy===x?'selected':''}>${new Date(2000,+x-1,1).toLocaleString('en',{month:'long'})}</option>`).join('')}</select>
+ <div id="msg"></div><button class="btn" id="save">Save</button></div>`;
+ $('#save').onclick=async()=>{
+  const g=$('#f_gstin').value.trim().toUpperCase();
+  if(g&&!/^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(g)){$('#msg').innerHTML='<div class="alert bad">GSTIN format looks invalid (15 characters).</div>';return}
+  if(!$('#f_name').value.trim()){$('#msg').innerHTML='<div class="alert bad">Business name is required.</div>';return}
+  Object.assign(c,{name:$('#f_name').value.trim(),address:$('#f_address').value.trim(),gstin:g,phone:$('#f_phone').value.trim(),state:$('#f_state').value.trim(),fy:$('#f_fy').value});
+  await putOne('settings',c);await audit('SETTINGS_UPDATED','company');$('#cn').textContent=c.name;$('#msg').innerHTML='<div class="alert ok">Saved.</div>'}}
+
+async function num(m){
+ const cs=await getAll('counters');
+ m.innerHTML=`<div class="card"><h2>Document numbering</h2><p style="font-size:13px;color:var(--mut);margin-top:0">Each document type has its own sequence. Numbers are never reused, and the next number can only be raised, never lowered.</p>
+ ${DOCS.map(([k,l])=>{const c=cs.find(x=>x.key===k);return `<div style="border-top:1px solid var(--bd);padding-top:6px;margin-top:8px"><b>${l}</b> <small style="color:var(--mut)">next: ${c.prefix}${String(c.next).padStart(c.padding,'0')}</small>
+ <div class="grid"><div><label>Prefix</label><input id="p_${k}" value="${esc(c.prefix)}" maxlength="10"></div><div><label>Next number</label><input id="n_${k}" type="number" min="${c.next}" value="${c.next}"></div></div></div>`}).join('')}
+ <div id="msg"></div><button class="btn" id="save">Save numbering</button></div>`;
+ $('#save').onclick=async()=>{
+  for(const [k,l] of DOCS){const c=cs.find(x=>x.key===k),n=parseInt($('#n_'+k).value,10),p=$('#p_'+k).value.trim();
+   if(!p||!/^[A-Za-z0-9\-\/]+$/.test(p)){$('#msg').innerHTML=`<div class="alert bad">${l}: prefix may use letters, digits, - and / only.</div>`;return}
+   if(!(n>=c.next)){$('#msg').innerHTML=`<div class="alert bad">${l}: next number cannot be lower than ${c.next}.</div>`;return}
+   if(p!==c.prefix||n!==c.next){c.prefix=p;c.next=n;await putOne('counters',c);await audit('NUMBERING_UPDATED',k+' '+p+n)}}
+  num(m);setTimeout(()=>$('#msg').innerHTML='<div class="alert ok">Saved.</div>',50)}}
+
+async function buildBackup(){
+ const data={};for(const n of STORES){if(n==='backups')continue;data[n]=await getAll(n)}
+ const s=data.settings.find(x=>x.key==='company');
+ const body={app:'BIONIKS_ERP',appVersion:APP_VERSION,dbVersion:DB_VERSION,created:new Date().toISOString(),data};
+ const checksum=await sha(JSON.stringify(body));return JSON.stringify({...body,checksum})}
+async function verify(txt){
+ const o=JSON.parse(txt);if(o.app!=='BIONIKS_ERP'||!o.data||!o.checksum)throw new Error('Not a Bioniks ERP backup.');
+ const {checksum,...body}=o;if(await sha(JSON.stringify(body))!==checksum)throw new Error('Checksum mismatch: file is damaged or edited.');
+ if(o.dbVersion>DB_VERSION)throw new Error('Backup is from a newer app version.');return o}
+
+async function bak(m){
+ const hist=(await getAll('backups')).reverse().slice(0,10);
+ m.innerHTML=`<div class="card"><h2>Backup</h2>
+ <p style="font-size:14px;margin-top:0">Tap Create backup, then save the file to <b>Files / iCloud Drive</b>. For a second copy, share the same file to <b>Google Drive</b> (use the Share sheet’s Drive option) or email it to yourself. A browser cannot save to several places automatically, so repeat the save for each location.</p>
+ <button class="btn" id="mk">Create backup file</button><div id="msg"></div></div>
+ <div class="card"><h2>Restore</h2><div class="alert bad">Restoring replaces all current data with the backup’s data.</div>
+ <input type="file" id="fl" accept=".json,application/json"><div id="rmsg"></div></div>
+ <div class="card"><h2>Backup history</h2><div class="scroll"><table><tr><th>When</th><th>Type</th><th>File</th></tr>${hist.map(b=>`<tr><td>${new Date(b.at).toLocaleString()}</td><td>${b.kind}</td><td>${esc(b.file||'')}</td></tr>`).join('')||'<tr><td colspan=3>No backups yet</td></tr>'}</table></div></div>`;
+ $('#mk').onclick=async()=>{
+  const txt=await buildBackup();await verify(txt);
+  const name='bioniks-erp-backup-'+new Date().toISOString().replace(/[:T]/g,'-').slice(0,19)+'.json';
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([txt],{type:'application/json'}));a.download=name;document.body.appendChild(a);a.click();a.remove();
+  await putOne('backups',{at:new Date().toISOString(),kind:'export',file:name,size:txt.length,verified:true,version:APP_VERSION});await audit('BACKUP_CREATED',name);
+  $('#msg').innerHTML='<div class="alert ok">Backup created and verified: '+esc(name)+'. Save it now, then repeat for a second location. A new file name is used each time, so nothing is overwritten.</div>'};
+ $('#fl').onchange=async e=>{const f=e.target.files[0];if(!f)return;
+  try{const o=await verify(await f.text());
+   const counts=Object.entries(o.data).filter(([,v])=>v.length).map(([k,v])=>k+': '+v.length).join(', ')||'empty';
+   if(!confirm('Backup from '+new Date(o.created).toLocaleString()+' is valid ('+counts+').\n\nReplace ALL current data with it?'))return;
+   for(const n of STORES){if(n==='backups')continue;await req(store(n,'readwrite').clear());for(const r of (o.data[n]||[]))await putOne(n,r)}
+   await putOne('backups',{at:new Date().toISOString(),kind:'restore',file:f.name,verified:true});await audit('RESTORE',f.name);
+   $('#rmsg').innerHTML='<div class="alert ok">Restore complete.</div>';
+  }catch(err){$('#rmsg').innerHTML='<div class="alert bad">'+esc(err.message)+'</div>'}}}
+const Q={c:'',p:''};
+const CTYPES=['Individual','Hospital','Clinic','Medical institution','Dealer','Other'];
+const field=(id,l,v,t='text',x='')=>`<label>${l}</label><input id="${id}" type="${t}" value="${esc(v)}" ${x}>`;
+const rowCard=(id,t,s)=>`<div class="card" data-id="${id}" style="margin-top:10px"><b>${esc(t)}</b><br><small style="color:var(--mut)">${esc(s)}</small></div>`;
+async function customers(m,id){
+ if(id!==undefined)return custForm(m,id);
+ m.innerHTML=`<input id="q" placeholder="Search name or mobile" value="${esc(Q.c)}"><button class="btn" id="add">+ New customer</button><div id="lst"></div>`;
+ const draw=async()=>{const t=Q.c.toLowerCase();const a=(await getAll('customers')).filter(c=>c.active!==false&&(c.name+c.mobile).toLowerCase().includes(t)).sort((x,y)=>x.name.localeCompare(y.name));
+  $('#lst').innerHTML=a.length?a.map(c=>rowCard(c.id,c.name,c.type+' · '+c.mobile+' · '+(c.district||''))).join(''):'<p style="color:var(--mut)">No customers yet.</p>';
+  document.querySelectorAll('#lst .card').forEach(e=>e.onclick=()=>customers(m,e.dataset.id))};
+ $('#q').oninput=e=>{Q.c=e.target.value;draw()};$('#add').onclick=()=>customers(m,'');draw()}
+async function custForm(m,id){
+ const c=id?await getOne('customers',id):{};
+ m.innerHTML=`<div class="card"><h2>${id?'Edit':'New'} customer</h2>${field('c_name','Name *',c.name||'')}${field('c_mobile','Mobile * (10 digits)',c.mobile||'','tel','inputmode="numeric" maxlength="10"')}${field('c_wa','WhatsApp',c.whatsapp||'','tel','inputmode="numeric" maxlength="10"')}${field('c_addr','Address',c.address||'')}${field('c_dist','District',c.district||'')}${field('c_state','State',c.state||'Kerala')}${field('c_gst','GSTIN (optional)',c.gstin||'')}<label>Customer type</label><select id="c_type">${CTYPES.map(t=>`<option ${c.type===t?'selected':''}>${t}</option>`).join('')}</select>${field('c_notes','Notes',c.notes||'')}<div id="msg"></div><button class="btn" id="sv">Save</button><button class="btn alt" id="bk">Back</button>${id?'<button class="btn alt" id="ar" style="color:var(--bad);border-color:var(--bad)">Archive customer</button><p style="font-size:12px;color:var(--mut)">Sales, rental, payment and service history will appear here once those modules are built.</p>':''}</div>`;
+ const bad=t=>$('#msg').innerHTML='<div class="alert bad">'+t+'</div>';
+ $('#bk').onclick=()=>customers(m);
+ $('#sv').onclick=async()=>{
+  const v=k=>$('#c_'+k).value.trim(),g=v('gst').toUpperCase();
+  if(!v('name'))return bad('Name is required.');
+  if(!/^\d{10}$/.test(v('mobile')))return bad('Mobile must be 10 digits.');
+  if(v('wa')&&!/^\d{10}$/.test(v('wa')))return bad('WhatsApp must be 10 digits.');
+  if(g&&!/^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(g))return bad('GSTIN format looks invalid.');
+  if((await getAll('customers')).some(x=>x.active!==false&&x.id!==id&&x.mobile===v('mobile')))return bad('Another customer already has this mobile number.');
+  const o={...c,id:id||crypto.randomUUID(),name:v('name'),mobile:v('mobile'),whatsapp:v('wa'),address:v('addr'),district:v('dist'),state:v('state'),gstin:g,type:$('#c_type').value,notes:v('notes'),active:true,createdAt:c.createdAt||new Date().toISOString()};
+  await putOne('customers',o);await audit(id?'CUSTOMER_UPDATED':'CUSTOMER_CREATED',o.name);customers(m)};
+ if(id)$('#ar').onclick=async()=>{if(!confirm('Archive '+c.name+'? Records are kept but hidden from the list.'))return;c.active=false;await putOne('customers',c);await audit('CUSTOMER_ARCHIVED',c.name);customers(m)}}
+async function cats(){let c=await getOne('settings','categories');if(!c){c={key:'categories',list:['BiPAP machines','CPAP machines','Oxygen concentrators','Masks','Tubes & accessories','Other']};await putOne('settings',c)}return c}
+async function products(m,id){
+ if(id!==undefined)return prodForm(m,id);
+ const c=await cats();
+ m.innerHTML=`<input id="q" placeholder="Search name or code" value="${esc(Q.p)}"><button class="btn" id="add">+ New product</button><div id="lst"></div><div class="card" style="margin-top:12px"><h2>Categories</h2><p style="font-size:14px">${c.list.map(esc).join(' · ')}</p><input id="nc" placeholder="New category name"><button class="btn alt" id="ac">Add category</button></div>`;
+ const draw=async()=>{const t=Q.p.toLowerCase();const a=(await getAll('products')).filter(p=>p.active!==false&&(p.name+p.code).toLowerCase().includes(t)).sort((x,y)=>x.name.localeCompare(y.name));
+  $('#lst').innerHTML=a.length?a.map(p=>rowCard(p.id,p.name,p.code+' · '+(p.kind==='rental'?'Rental equipment':'For sale')+' · '+p.category+' · '+money(p.sellingPrice)+' · GST '+p.gst+'%')).join(''):'<p style="color:var(--mut)">No products yet.</p>';
+  document.querySelectorAll('#lst .card').forEach(e=>e.onclick=()=>products(m,e.dataset.id))};
+ $('#q').oninput=e=>{Q.p=e.target.value;draw()};$('#add').onclick=()=>products(m,'');draw();
+ $('#ac').onclick=async()=>{const n=$('#nc').value.trim();if(!n||c.list.some(x=>x.toLowerCase()===n.toLowerCase()))return;c.list.push(n);await putOne('settings',c);await audit('CATEGORY_ADDED',n);products(m)}}
+async function prodForm(m,id){
+ const p=id?await getOne('products',id):{kind:'sale'},c=await cats();
+ m.innerHTML=`<div class="card"><h2>${id?'Edit':'New'} product</h2><label>Type</label><select id="p_kind"><option value="sale" ${p.kind==='sale'?'selected':''}>Saleable stock</option><option value="rental" ${p.kind==='rental'?'selected':''}>Rental equipment (reusable)</option></select>${field('p_code','Product code *',p.code||'')}${field('p_name','Name *',p.name||'')}<label>Track serial numbers</label><select id="p_ser"><option value="0">No (count by quantity)</option><option value="1" ${p.serialTracked?'selected':''}>Yes (each unit has a serial)</option></select><label>Category</label><select id="p_cat">${c.list.map(x=>`<option ${p.category===x?'selected':''}>${esc(x)}</option>`).join('')}</select>${field('p_hsn','HSN code',p.hsn||'')}${field('p_gst','GST rate % * (check with your accountant)',p.gst??'','number','inputmode="decimal" min="0" max="28" step="0.01"')}${field('p_pp','Purchase price',p.purchasePrice??'','number','inputmode="decimal" min="0" step="0.01"')}${field('p_sp','Selling price',p.sellingPrice??'','number','inputmode="decimal" min="0" step="0.01"')}${field('p_rp','Rental price per day',p.rentalPrice??'','number','inputmode="decimal" min="0" step="0.01"')}${field('p_min','Minimum stock alert',p.minStock??'','number','inputmode="numeric" min="0"')}${field('p_os','Opening stock (saleable items)',p.openingStock??'','number','inputmode="numeric" min="0"')}<p style="font-size:12px;color:var(--mut)">Individual rental machines with serial numbers are added in the Rental phase.</p><div id="msg"></div><button class="btn" id="sv">Save</button><button class="btn alt" id="bk">Back</button>${id?'<button class="btn alt" id="ar" style="color:var(--bad);border-color:var(--bad)">Archive product</button>':''}</div>`;
+ const bad=t=>$('#msg').innerHTML='<div class="alert bad">'+t+'</div>';
+ $('#bk').onclick=()=>products(m);
+ $('#sv').onclick=async()=>{
+  const v=k=>$('#p_'+k).value.trim(),n=k=>v(k)===''?0:Number(v(k));
+  if(!v('code')||!v('name'))return bad('Code and name are required.');
+  if(v('gst')===''||!(Number(v('gst'))>=0&&Number(v('gst'))<=28))return bad('Enter a GST rate between 0 and 28.');
+  if([n('pp'),n('sp'),n('rp'),n('min'),n('os')].some(x=>!(x>=0)))return bad('Prices and stock cannot be negative.');
+  if((await getAll('products')).some(x=>x.active!==false&&x.id!==id&&x.code.toLowerCase()===v('code').toLowerCase()))return bad('This product code already exists.');
+  const o={...p,id:id||crypto.randomUUID(),kind:$('#p_kind').value,serialTracked:$('#p_ser').value==='1',code:v('code'),name:v('name'),category:$('#p_cat').value,hsn:v('hsn'),gst:Number(v('gst')),purchasePrice:n('pp'),sellingPrice:n('sp'),rentalPrice:n('rp'),minStock:n('min'),openingStock:n('os'),active:true,createdAt:p.createdAt||new Date().toISOString()};
+  await putOne('products',o);await audit(id?'PRODUCT_UPDATED':'PRODUCT_CREATED',o.code);products(m)};
+ if(id)$('#ar').onclick=async()=>{if(!confirm('Archive '+p.name+'?'))return;p.active=false;await putOne('products',p);await audit('PRODUCT_ARCHIVED',p.code);products(m)}}
+const tdy=()=>new Date().toISOString().slice(0,10);
+const r2=n=>Math.round((n+Number.EPSILON)*100)/100;
+async function nextNo(k){const c=await getOne('counters',k);const no=c.prefix+String(c.next).padStart(c.padding,'0');c.next++;await putOne('counters',c);return no}
+function atomic(ops){return new Promise((res,rej)=>{const names=[...new Set(ops.map(o=>o[0]))];const t=db.transaction(names,'readwrite');ops.forEach(([n,v])=>t.objectStore(n).put(v));t.oncomplete=res;t.onerror=t.onabort=()=>rej(t.error)})}
+async function stockLevels(){const [ps,mv]=await Promise.all([getAll('products'),getAll('stock')]);return ps.filter(p=>p.active!==false&&p.kind==='sale').map(p=>{const q=(+p.openingStock||0)+mv.filter(x=>x.productId===p.id).reduce((s,x)=>s+x.qty,0);return {p,q,val:q*(+p.purchasePrice||0)}})}
+async function stockSummary(){const l=await stockLevels();return {tiles:[['Inventory value',money(l.reduce((s,x)=>s+x.val,0))],['Low-stock items',l.filter(x=>x.p.minStock>0&&x.q<=x.p.minStock).length]]}}
+const calc=(L,inter)=>{let t=0,c=0,s=0,i=0;L.forEach(l=>{const tx=(+l.qty||0)*(+l.rate||0),g=tx*(+l.gst||0)/100;t+=tx;if(inter)i+=g;else{c+=g/2;s+=g/2}});t=r2(t);c=r2(c);s=r2(s);i=r2(i);return {taxable:t,cgst:c,sgst:s,igst:i,total:r2(t+c+s+i)}};
+async function suppliers(m,id){
+ if(id!==undefined)return supForm(m,id);
+ m.innerHTML='<button class="btn" id="add">+ New supplier</button><div id="lst"></div>';
+ const a=(await getAll('suppliers')).filter(s=>s.active!==false).sort((x,y)=>x.name.localeCompare(y.name));
+ $('#lst').innerHTML=a.length?a.map(s=>rowCard(s.id,s.name,(s.phone||'')+' · '+(s.state||''))).join(''):'<p style="color:var(--mut)">No suppliers yet.</p>';
+ document.querySelectorAll('#lst .card').forEach(e=>e.onclick=()=>suppliers(m,e.dataset.id));$('#add').onclick=()=>suppliers(m,'')}
+async function supForm(m,id){
+ const s=id?await getOne('suppliers',id):{};
+ const ps=id?(await getAll('purchases')).filter(p=>p.supplierId===id&&p.status!=='cancelled'):[];
+ const tot=ps.reduce((a,p)=>a+p.total,0),paid=ps.reduce((a,p)=>a+p.paid,0);
+ m.innerHTML=`<div class="card"><h2>${id?'Edit':'New'} supplier</h2>${id?`<div class="alert ok">Purchases: ${ps.length} · Total ${money(tot)} · Outstanding ${money(tot-paid)}</div>`:''}${field('s_name','Name *',s.name||'')}${field('s_phone','Phone',s.phone||'','tel')}${field('s_addr','Address',s.address||'')}${field('s_state','State * (decides IGST or CGST/SGST)',s.state||'Kerala')}${field('s_gst','GSTIN',s.gstin||'')}${field('s_prod','Products supplied',s.products||'')}<div id="msg"></div><button class="btn" id="sv">Save</button><button class="btn alt" id="bk">Back</button>${id?'<button class="btn alt" id="ar" style="color:var(--bad);border-color:var(--bad)">Archive supplier</button>':''}</div>`;
+ $('#bk').onclick=()=>suppliers(m);
+ $('#sv').onclick=async()=>{const v=k=>$('#s_'+k).value.trim(),g=v('gst').toUpperCase();
+  if(!v('name')||!v('state'))return $('#msg').innerHTML='<div class="alert bad">Name and state are required.</div>';
+  if(g&&g.length!==15)return $('#msg').innerHTML='<div class="alert bad">GSTIN must be 15 characters.</div>';
+  const o={...s,id:id||crypto.randomUUID(),name:v('name'),phone:v('phone'),address:v('addr'),state:v('state'),gstin:g,products:v('prod'),active:true,createdAt:s.createdAt||new Date().toISOString()};
+  await putOne('suppliers',o);await audit(id?'SUPPLIER_UPDATED':'SUPPLIER_CREATED',o.name);suppliers(m)};
+ if(id)$('#ar').onclick=async()=>{if(!confirm('Archive '+s.name+'?'))return;s.active=false;await putOne('suppliers',s);await audit('SUPPLIER_ARCHIVED',s.name);suppliers(m)}}
+async function stockView(m,pid){
+ const lv=await stockLevels();
+ if(pid){const x=lv.find(l=>l.p.id===pid);
+  m.innerHTML=`<div class="card"><h2>${esc(x.p.name)}</h2><p>In stock: <b>${x.q}</b></p><label>Action</label><select id="a_t"><option value="add">Add stock</option><option value="deduct">Deduct stock</option><option value="damaged">Mark damaged</option></select>${field('a_q','Quantity','','number','inputmode="numeric" min="1"')}${field('a_n','Reason / note','')}<div id="msg"></div><button class="btn" id="sv">Save</button><button class="btn alt" id="bk">Back</button></div>`;
+  $('#bk').onclick=()=>stockView(m);
+  $('#sv').onclick=async()=>{const q=parseInt($('#a_q').value,10),t=$('#a_t').value;
+   if(!(q>0))return $('#msg').innerHTML='<div class="alert bad">Enter a quantity above 0.</div>';
+   if(x.p.serialTracked)return $('#msg').innerHTML='<div class="alert bad">This product is tracked by serial number. Use the Serials tab for corrections.</div>';if(t!=='add'&&q>x.q)return $('#msg').innerHTML='<div class="alert bad">Not enough stock.</div>';
+   await putOne('stock',{id:crypto.randomUUID(),productId:pid,date:tdy(),at:new Date().toISOString(),qty:t==='add'?q:-q,type:t==='add'?'adjustment':t,ref:'',note:$('#a_n').value.trim()});await audit('STOCK_'+t.toUpperCase(),x.p.code+' '+q);stockView(m)};return}
+ const names=Object.fromEntries((await getAll('products')).map(p=>[p.id,p.name]));
+ const mv=(await getAll('stock')).sort((a,b)=>b.at.localeCompare(a.at)).slice(0,30);
+ m.innerHTML=`<div class="card"><h2>Stock · value ${money(lv.reduce((s,x)=>s+x.val,0))}</h2><p style="font-size:12px;color:var(--mut);margin:0">Saleable items only, valued at purchase price. Rental machines are tracked in the Rental phase. Tap an item to adjust.</p>${lv.map(x=>rowCard(x.p.id,x.p.name+(x.p.minStock>0&&x.q<=x.p.minStock?' ⚠ LOW':''),'Qty '+x.q+' · '+money(x.val))).join('')||'<p style="color:var(--mut)">No saleable products yet.</p>'}</div><div class="card"><h2>Recent movements</h2><div class="scroll"><table><tr><th>Date</th><th>Item</th><th>Qty</th><th>Type</th></tr>${mv.map(x=>`<tr><td>${x.date}</td><td>${esc(names[x.productId])}</td><td>${x.qty}</td><td>${x.type}${x.ref?' '+esc(x.ref):''}</td></tr>`).join('')||'<tr><td colspan=4>None yet</td></tr>'}</table></div></div>`;
+ document.querySelectorAll('.card[data-id]').forEach(e=>e.onclick=()=>stockView(m,e.dataset.id))}
+async function purchases(m,id){
+ if(id==='')return purForm(m);
+ if(id)return purView(m,id);
+ const sups=Object.fromEntries((await getAll('suppliers')).map(s=>[s.id,s.name]));
+ const a=(await getAll('purchases')).sort((x,y)=>y.createdAt.localeCompare(x.createdAt));
+ m.innerHTML='<button class="btn" id="add">+ New purchase</button><div id="lst"></div>';
+ $('#lst').innerHTML=a.length?a.map(p=>rowCard(p.id,p.number+' · '+money(p.total),(sups[p.supplierId]||'')+' · '+p.date+' · '+p.status)).join(''):'<p style="color:var(--mut)">No purchases yet.</p>';
+ document.querySelectorAll('#lst .card').forEach(e=>e.onclick=()=>purchases(m,e.dataset.id));$('#add').onclick=()=>purchases(m,'')}
+async function purForm(m){
+ const [sups,prods,co]=await Promise.all([getAll('suppliers'),getAll('products'),getOne('settings','company')]);
+ const S=sups.filter(s=>s.active!==false),P=prods.filter(p=>p.active!==false);
+ if(!S.length||!P.length){m.innerHTML='<div class="alert">Add at least one supplier and one product first.</div>';return}
+ const nl=()=>({productId:P[0].id,qty:1,rate:P[0].purchasePrice||0,gst:P[0].gst}),L=[nl()];
+ m.innerHTML=`<div class="card"><h2>New purchase</h2><label>Supplier</label><select id="u_s">${S.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('')}</select>${field('u_n','Supplier invoice no. *','')}${field('u_d','Date',tdy(),'date')}<div id="ls"></div><button class="btn alt" id="al">+ Add item</button><div id="tt"></div><div id="msg"></div><button class="btn" id="sv">Save and receive stock</button><button class="btn alt" id="bk">Back</button></div>`;
+ const inter=()=>{const s=S.find(x=>x.id===$('#u_s').value);return (s.state||'').trim().toLowerCase()!==(co.state||'').trim().toLowerCase()};
+ const tot=()=>{const c=calc(L,inter());$('#tt').innerHTML=`<p style="font-size:14px">Taxable ${money(c.taxable)}<br>${inter()?'IGST '+money(c.igst):'CGST '+money(c.cgst)+' · SGST '+money(c.sgst)}<br><b>Total ${money(c.total)}</b></p>`};
+ const rl=()=>{$('#ls').innerHTML=L.map((l,i)=>`<div style="border-top:1px solid var(--bd);margin-top:8px"><label>Item</label><select data-i="${i}" data-k="productId">${P.map(p=>`<option value="${p.id}" ${p.id===l.productId?'selected':''}>${esc(p.name)}</option>`).join('')}</select><div class="grid"><div><label>Qty</label><input type="number" inputmode="numeric" min="1" data-i="${i}" data-k="qty" value="${l.qty}"></div><div><label>Rate (excl. GST)</label><input type="number" inputmode="decimal" step="0.01" data-i="${i}" data-k="rate" value="${l.rate}"></div></div><label>GST %</label><input type="number" inputmode="decimal" data-i="${i}" data-k="gst" value="${l.gst}">${(P.find(p=>p.id===l.productId)||{}).serialTracked?'<label>Serial numbers (one per line, '+l.qty+' needed)</label><textarea rows="3" data-i="'+i+'" data-k="serials">'+esc(l.serials||'')+'</textarea>':''}${L.length>1?`<button class="btn alt" data-rm="${i}">Remove item</button>`:''}</div>`).join('');
+  document.querySelectorAll('#ls [data-k]').forEach(el=>el.onchange=el.oninput=()=>{const l=L[el.dataset.i];l[el.dataset.k]=el.value;if(el.dataset.k==='productId'){const p=P.find(x=>x.id===el.value);l.rate=p.purchasePrice||0;l.gst=p.gst;rl()}tot()});
+  document.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>{L.splice(b.dataset.rm,1);rl()});tot()};
+ $('#al').onclick=()=>{L.push(nl());rl()};$('#u_s').onchange=tot;$('#bk').onclick=()=>purchases(m);rl();
+ $('#sv').onclick=async()=>{const bad=t=>$('#msg').innerHTML='<div class="alert bad">'+t+'</div>';
+  const no=$('#u_n').value.trim(),sid=$('#u_s').value;
+  if(!no)return bad('Enter the supplier invoice number.');
+  if(L.some(l=>!(+l.qty>0)||l.rate===''||!(+l.rate>=0)||l.gst===''||!(+l.gst>=0&&+l.gst<=28)))return bad('Check quantity, rate and GST on every item.');
+  if((await getAll('purchases')).some(p=>p.supplierId===sid&&p.supplierInvoiceNo.toLowerCase()===no.toLowerCase()&&p.status!=='cancelled'))return bad('This supplier invoice number is already recorded.');
+  const SER={},exU=await getAll('units'),exM=await getAll('machines'),taken=new Set([...exU.filter(u=>u.status!=='void').map(u=>u.serial.toLowerCase()),...exM.filter(x=>x.active!==false).map(x=>x.serial.toLowerCase())]),seen=new Set();
+  for(let i=0;i<L.length;i++){const p=P.find(x=>x.id===L[i].productId);if(!p.serialTracked)continue;const a=String(L[i].serials||'').split(/[\n,;]+/).map(x=>x.trim()).filter(Boolean);
+   if(a.length!==+L[i].qty)return bad(esc(p.name)+': enter exactly '+L[i].qty+' serial number(s), you entered '+a.length+'.');
+   for(const s of a){const k=s.toLowerCase();if(taken.has(k)||seen.has(k))return bad('Serial number '+esc(s)+' already exists.');seen.add(k)}SER[i]=a}
+  const lines=L.map((l,i)=>({productId:l.productId,qty:+l.qty,rate:+l.rate,gst:+l.gst,serials:SER[i]||[]})),it=inter(),c=calc(lines,it),at=new Date().toISOString();
+  const number=await nextNo('purchase_invoice'),id=crypto.randomUUID();
+  const ops=[['purchases',{id,number,supplierId:sid,supplierInvoiceNo:no,date:$('#u_d').value||tdy(),lines,interstate:it,...c,paid:0,status:'received',createdAt:at}]];
+  lines.forEach(l=>{const p=P.find(x=>x.id===l.productId);if(p.kind==='sale')ops.push(['stock',{id:crypto.randomUUID(),productId:p.id,date:tdy(),at,qty:l.qty,type:'purchase',ref:number,note:''}])});
+  lines.forEach(l=>{const p=P.find(x=>x.id===l.productId);l.serials.forEach(s=>ops.push(p.kind==='sale'?['units',{id:crypto.randomUUID(),serial:s,productId:p.id,status:'instock',purchaseId:id,createdAt:at}]:['machines',{id:crypto.randomUUID(),productId:p.id,serial:s,notes:'Purchased '+number,status:'available',active:true,purchaseId:id,createdAt:at}]))});
+  await atomic(ops);await audit('PURCHASE_CREATED',number+' '+money(c.total));purchases(m,id)}}
+async function purView(m,id){
+ const p=await getOne('purchases',id),s=await getOne('suppliers',p.supplierId),prods=Object.fromEntries((await getAll('products')).map(x=>[x.id,x]));
+ m.innerHTML=`<div class="card"><h2>${esc(p.number)} ${p.status==='cancelled'?'(CANCELLED)':''}</h2><p style="font-size:14px">${esc(s&&s.name)}<br>Supplier inv: ${esc(p.supplierInvoiceNo)} · ${p.date}</p><div class="scroll"><table><tr><th>Item</th><th>Qty</th><th>Rate</th><th>GST</th></tr>${p.lines.map(l=>`<tr><td>${esc(prods[l.productId]&&prods[l.productId].name)}</td><td>${l.qty}</td><td>${money(l.rate)}</td><td>${l.gst}%</td></tr>`).join('')}</table></div><p>Taxable ${money(p.taxable)}<br>${p.interstate?'IGST '+money(p.igst):'CGST '+money(p.cgst)+' · SGST '+money(p.sgst)}<br><b>Total ${money(p.total)}</b><br>Paid ${money(p.paid)} · Balance ${money(p.total-p.paid)}</p><p style="font-size:12px;color:var(--mut)">Record supplier payments under Accounts, Pay supplier.</p><div id="msg"></div><button class="btn alt" id="gn">Goods receipt note (GRN)</button><button class="btn alt" id="bk">Back</button>${p.status==='received'?'<button class="btn alt" id="cx" style="color:var(--bad);border-color:var(--bad)">Cancel purchase</button>':''}</div>`;
+ $('#bk').onclick=()=>purchases(m);$('#gn').onclick=()=>grnDoc(m,id);
+ if(p.status==='received')$('#cx').onclick=async()=>{
+  const lv=await stockLevels();
+  for(const l of p.lines){const x=lv.find(z=>z.p.id===l.productId);if(x&&x.q<l.qty)return $('#msg').innerHTML='<div class="alert bad">Cannot cancel: '+esc(x.p.name)+' stock is lower than the quantity received.</div>'}
+  const UV0=(await getAll('units')).filter(u=>u.purchaseId===id),MV0=(await getAll('machines')).filter(x=>x.purchaseId===id);
+  if(UV0.some(u=>u.status!=='instock')||MV0.some(x=>x.status!=='available'))return $('#msg').innerHTML='<div class="alert bad">Cannot cancel: some serial-numbered units from this purchase are already sold, rented or in use.</div>';
+  if(!confirm('Cancel '+p.number+'? Stock is reversed and the record stays in history.'))return;
+  const UV=[...UV0.map(u=>['units',{...u,status:'void'}]),...MV0.map(x=>['machines',{...x,active:false,status:'retired'}])];
+  const at=new Date().toISOString();p.status='cancelled';p.cancelledAt=at;
+  const ops=[['purchases',p],...UV];p.lines.forEach(l=>{if(prods[l.productId]&&prods[l.productId].kind==='sale')ops.push(['stock',{id:crypto.randomUUID(),productId:l.productId,date:tdy(),at,qty:-l.qty,type:'purchase_cancel',ref:p.number,note:''}])});
+  await atomic(ops);await audit('PURCHASE_CANCELLED',p.number);purView(m,id)}}
+const PAYM=['Cash','UPI','Bank transfer','Card','Other'];
+const calcS=(L,inter,incl)=>{let tx=0,c=0,s=0,i=0,d=0;const lines=L.map(l=>{const q=+l.qty||0,g=+l.gst||0,gross=q*(+l.rate||0),ds=gross*(+l.disc||0)/100,net=gross-ds;let t,tax;if(incl){t=net/(1+g/100);tax=net-t}else{t=net;tax=net*g/100}t=r2(t);tax=r2(tax);d+=ds;tx+=t;if(inter)i+=tax;else{const h=r2(tax/2);c+=h;s+=r2(tax-h)}return {...l,taxable:t,tax}});return {lines,discount:r2(d),taxable:r2(tx),cgst:r2(c),sgst:r2(s),igst:r2(i),total:r2(tx+c+s+i)}};
+const stOf=v=>v.status==='cancelled'?'CANCELLED':r2(v.total-v.paid-(v.credited||0))<=0?'PAID':v.paid>0?'PARTIAL':'UNPAID';
+async function salesView(m,id){
+ if(id==='')return saleForm(m);
+ if(id)return saleDoc(m,id);
+ const cu=Object.fromEntries((await getAll('customers')).map(c=>[c.id,c.name]));
+ const a=(await getAll('invoices')).sort((x,y)=>y.createdAt.localeCompare(x.createdAt));
+ m.innerHTML='<button class="btn" id="add">+ New sales invoice</button><div id="lst"></div>';
+ $('#lst').innerHTML=a.length?a.map(v=>rowCard(v.id,v.number+' · '+money(v.total),(cu[v.customerId]||'')+' · '+v.date+' · '+(v.type==='credit'?'CREDIT NOTE':stOf(v)))).join(''):'<p style="color:var(--mut)">No invoices yet.</p>';
+ document.querySelectorAll('#lst .card').forEach(e=>e.onclick=()=>salesView(m,e.dataset.id));$('#add').onclick=()=>salesView(m,'')}
+async function saleForm(m){
+ const [cs,ps,co]=await Promise.all([getAll('customers'),getAll('products'),getOne('settings','company')]);
+ const C=cs.filter(c=>c.active!==false),P=ps.filter(p=>p.active!==false&&p.kind==='sale');
+ if(!C.length||!P.length){m.innerHTML='<div class="alert">Add at least one customer and one saleable product first. Rental equipment is billed in the Rental phase.</div>';return}
+ const lv=await stockLevels(),qn=i=>(lv.find(x=>x.p.id===i)||{q:0}).q,UNs=await getAll('units');
+ let fq='';const nl=()=>({productId:P[0].id,qty:1,rate:P[0].sellingPrice||0,disc:0,gst:P[0].gst}),L=[nl()];
+ m.innerHTML=`<div class="card"><h2>New sales invoice</h2><label>Customer</label><select id="v_c">${C.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select>${field('v_d','Date',tdy(),'date')}<label>Prices entered</label><select id="v_i"><option value="0">Excluding GST</option><option value="1">Including GST</option></select>${field('v_q','Search products','')}<div id="ls"></div><button class="btn alt" id="al">+ Add item</button><div id="tt"></div>${field('v_p','Amount received now','0','number','inputmode="decimal" min="0" step="0.01"')}<label>Payment method</label><select id="v_m">${PAYM.map(x=>`<option>${x}</option>`).join('')}</select><div id="msg"></div><button class="btn" id="sv">Save invoice</button><button class="btn alt" id="bk">Back</button></div>`;
+ const inter=()=>{const c=C.find(x=>x.id===$('#v_c').value);return (c.state||'').trim().toLowerCase()!==(co.state||'').trim().toLowerCase()},incl=()=>$('#v_i').value==='1';
+ const tot=()=>{const c=calcS(L,inter(),incl()),pd=+$('#v_p').value||0;$('#tt').innerHTML=`<p style="font-size:14px">Discount ${money(c.discount)} · Taxable ${money(c.taxable)}<br>${inter()?'IGST '+money(c.igst):'CGST '+money(c.cgst)+' · SGST '+money(c.sgst)}<br><b>Total ${money(c.total)}</b> · Balance ${money(c.total-pd)}</p>`};
+ const rl=()=>{$('#ls').innerHTML=L.map((l,i)=>`<div style="border-top:1px solid var(--bd);margin-top:8px"><label>Item</label><select data-i="${i}" data-k="productId">${P.filter(p=>p.id===l.productId||(p.name+p.code).toLowerCase().includes(fq)).map(p=>`<option value="${p.id}" ${p.id===l.productId?'selected':''}>${esc(p.name)} (stock ${qn(p.id)})</option>`).join('')}</select><div class="grid"><div><label>Qty</label><input type="number" inputmode="numeric" min="1" data-i="${i}" data-k="qty" value="${l.qty}"></div><div><label>Price</label><input type="number" inputmode="decimal" step="0.01" data-i="${i}" data-k="rate" value="${l.rate}"></div><div><label>Discount %</label><input type="number" inputmode="decimal" data-i="${i}" data-k="disc" value="${l.disc}"></div><div><label>GST %</label><input type="number" inputmode="decimal" data-i="${i}" data-k="gst" value="${l.gst}"></div></div>${(P.find(p=>p.id===l.productId)||{}).serialTracked?'<label>Select '+l.qty+' serial number(s)</label>'+(UNs.filter(u=>u.productId===l.productId&&u.status==='instock').map(u=>'<label style="display:block;margin:2px 0"><input type="checkbox" data-i="'+i+'" data-s="'+esc(u.serial)+'" style="width:auto" '+((l.serials||[]).includes(u.serial)?'checked':'')+'> '+esc(u.serial)+'</label>').join('')||'<small>No serial numbers in stock.</small>'):''}${L.length>1?`<button class="btn alt" data-rm="${i}">Remove item</button>`:''}</div>`).join('');
+  document.querySelectorAll('#ls [data-k]').forEach(el=>el.onchange=el.oninput=()=>{const l=L[el.dataset.i];l[el.dataset.k]=el.value;if(el.dataset.k==='productId'){const p=P.find(x=>x.id===el.value);l.rate=p.sellingPrice||0;l.gst=p.gst;rl()}tot()});
+  document.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>{L.splice(b.dataset.rm,1);rl()});tot()};
+ $('#al').onclick=()=>{L.push(nl());rl()};$('#bk').onclick=()=>salesView(m);
+ $('#v_c').onchange=$('#v_i').onchange=$('#v_p').oninput=tot;$('#v_q').oninput=e=>{fq=e.target.value.toLowerCase();rl()};rl();
+ $('#ls').addEventListener('change',e=>{const c=e.target;if(c.dataset&&c.dataset.s!==undefined){const l=L[c.dataset.i];l.serials=c.checked?[...(l.serials||[]),c.dataset.s]:(l.serials||[]).filter(x=>x!==c.dataset.s)}});
+ $('#sv').onclick=async()=>{const bad=t=>$('#msg').innerHTML='<div class="alert bad">'+t+'</div>';
+  if(L.some(l=>!(+l.qty>0)||l.rate===''||!(+l.rate>=0)||!(+l.disc>=0&&+l.disc<=100)||l.gst===''||!(+l.gst>=0&&+l.gst<=28)))return bad('Check quantity, price, discount and GST on every item.');
+  const need={};L.forEach(l=>need[l.productId]=(need[l.productId]||0)+(+l.qty));
+  for(const k in need)if(need[k]>qn(k))return bad('Not enough stock for '+esc(P.find(p=>p.id===k).name)+' (available '+qn(k)+').');
+  const SEL=L.map(l=>P.find(p=>p.id===l.productId).serialTracked?[...new Set(l.serials||[])].filter(s=>UNs.some(u=>u.serial===s&&u.productId===l.productId&&u.status==='instock')):[]),bs=L.findIndex((l,i)=>P.find(p=>p.id===l.productId).serialTracked&&SEL[i].length!==+l.qty);
+  if(bs>=0)return bad('Select exactly '+L[bs].qty+' serial number(s) for each serial-tracked item.');
+  const allS=SEL.flat();if(new Set(allS).size!==allS.length)return bad('The same serial number is selected twice.');
+  const lines=L.map((l,i)=>({productId:l.productId,name:P.find(p=>p.id===l.productId).name,hsn:P.find(p=>p.id===l.productId).hsn,qty:+l.qty,rate:+l.rate,disc:+l.disc,gst:+l.gst,returned:0,serials:SEL[i]}));
+  const it=inter(),inc=incl(),c=calcS(lines,it,inc),pd=r2(+$('#v_p').value||0);
+  if(pd<0||pd>c.total)return bad('Amount received must be between 0 and the invoice total.');
+  const at=new Date().toISOString(),number=await nextNo('sales_invoice'),id=crypto.randomUUID(),date=$('#v_d').value||tdy();
+  const pays=pd>0?[{id:crypto.randomUUID(),date,amount:pd,method:$('#v_m').value,receipt:await nextNo('payment_receipt')}]:[];
+  const ops=[['invoices',{id,type:'sale',number,customerId:$('#v_c').value,date,lines:c.lines,interstate:it,inclusive:inc,discount:c.discount,taxable:c.taxable,cgst:c.cgst,sgst:c.sgst,igst:c.igst,total:c.total,paid:pd,credited:0,payments:pays,status:'active',createdAt:at}]];
+  lines.forEach(l=>ops.push(['stock',{id:crypto.randomUUID(),productId:l.productId,date,at,qty:-l.qty,type:'sale',ref:number,note:''}]));
+  lines.forEach(l=>l.serials.forEach(s=>{const u=UNs.find(x=>x.serial===s&&x.productId===l.productId);ops.push(['units',{...u,status:'sold',saleId:id,customerId:$('#v_c').value,soldAt:date}])}));
+  await atomic(ops);await audit('SALE_CREATED',number+' '+money(c.total));salesView(m,id)}}
+async function saleDoc(m,id){
+ const [v,co,all]=await Promise.all([getOne('invoices',id),getOne('settings','company'),getAll('invoices')]);
+ const cu=await getOne('customers',v.customerId),cr=v.type==='credit',credits=all.filter(x=>x.type==='credit'&&x.invoiceId===id);
+ const bal=r2(v.total-v.paid-(v.credited||0)),st=cr?'':stOf(v);
+ const rows=v.lines.map(l=>`<tr><td>${esc(l.name)}<br><small>HSN ${esc(l.hsn||'-')}</small>${l.serials&&l.serials.length?'<br><small>S/N: '+l.serials.map(esc).join(', ')+'</small>':''}</td><td>${l.qty}</td><td>${money(l.rate)}</td><td>${l.disc}%</td><td>${money(l.taxable)}</td><td>${l.gst}%</td><td>${money(l.tax)}</td></tr>`).join('');
+ m.innerHTML=`<div class="card"><div style="text-align:center"><b style="font-size:18px">${esc(co.name)}</b><br>${esc(co.address)}<br>${co.gstin?'GSTIN: '+esc(co.gstin):''} ${esc(co.phone)}</div><h2 style="text-align:center;margin-top:12px">${cr?'CREDIT NOTE':co.gstin?'TAX INVOICE':'INVOICE'} ${st==='CANCELLED'?'(CANCELLED)':''}</h2><p style="font-size:14px"><b>${esc(v.number)}</b> · ${v.date}${cr?'<br>Against invoice: '+esc((all.find(x=>x.id===v.invoiceId)||{}).number):''}<br>Bill to: <b>${esc(cu&&cu.name)}</b><br>${esc(cu&&cu.address)} ${esc(cu&&cu.district)}<br>${cu&&cu.gstin?'Customer GSTIN: '+esc(cu.gstin):''}</p><div class="scroll"><table><tr><th>Item</th><th>Qty</th><th>Rate</th><th>Disc</th><th>Taxable</th><th>GST</th><th>Tax</th></tr>${rows}</table></div><p style="text-align:right">Discount ${money(v.discount)}<br>Taxable ${money(v.taxable)}<br>${v.interstate?'IGST '+money(v.igst):'CGST '+money(v.cgst)+' · SGST '+money(v.sgst)}<br><b style="font-size:18px">Total ${money(v.total)}</b>${cr?'':`<br>Paid ${money(v.paid)}${v.credited?' · Credit notes '+money(v.credited):''}<br><b>Balance due ${money(bal)}</b> · ${st}`}</p>${(v.payments||[]).length?'<p style="font-size:13px">Payments: '+v.payments.map(p=>p.date+' '+money(p.amount)+' '+p.method+' ('+esc(p.receipt)+')').join('; ')+'</p>':''}${credits.length?'<p style="font-size:13px">Credit notes: '+credits.map(x=>esc(x.number)+' '+money(x.total)).join('; ')+'</p>':''}<div class="noprint"><div id="act"></div><div id="msg"></div><button class="btn" id="pr">Print / Save as PDF</button><button class="btn alt" id="sh">Share</button>${!cr?'<button class="btn alt" id="dn">Delivery note</button>':''}${!cr&&st!=='CANCELLED'?`${bal>0?'<button class="btn alt" id="pay">Record payment</button>':''}<button class="btn alt" id="ret">Sales return (credit note)</button><button class="btn alt" id="cx" style="color:var(--bad);border-color:var(--bad)">Cancel invoice</button>`:''}<button class="btn alt" id="bk">Back</button></div></div>`;
+ const msg=(t,k='bad')=>$('#msg').innerHTML='<div class="alert '+k+'">'+t+'</div>';
+ $('#bk').onclick=()=>salesView(m);
+ $('#pr').onclick=()=>{try{window.print()}catch(e){msg('Printing is blocked here. Take a screenshot of the invoice instead.')}};
+ $('#sh').onclick=async()=>{const t=co.name+' '+v.number+' dated '+v.date+'. Total '+money(v.total)+(cr?'':'. Balance due '+money(bal));try{if(navigator.share)await navigator.share({title:v.number,text:t});else{await navigator.clipboard.writeText(t);msg('Summary copied.','ok')}}catch(e){}};
+ if($('#dn'))$('#dn').onclick=()=>dnDoc(m,'sale',id);
+ if(cr||st==='CANCELLED')return;
+ if($('#pay'))$('#pay').onclick=()=>{$('#act').innerHTML=`${field('y_a','Amount',bal,'number','inputmode="decimal" step="0.01"')}<label>Method</label><select id="y_m">${PAYM.map(x=>`<option>${x}</option>`).join('')}</select><button class="btn" id="y_s">Save payment</button>`;
+  $('#y_s').onclick=async()=>{const a=r2(+$('#y_a').value);if(!(a>0&&a<=bal))return msg('Amount must be above 0 and not more than the balance.');
+   v.payments=v.payments||[];v.payments.push({id:crypto.randomUUID(),date:tdy(),amount:a,method:$('#y_m').value,receipt:await nextNo('payment_receipt')});v.paid=r2(v.paid+a);await putOne('invoices',v);await audit('SALE_PAYMENT',v.number+' '+money(a));saleDoc(m,id)}};
+ $('#ret').onclick=()=>{$('#act').innerHTML='<p style="font-size:14px">Quantity to return:</p>'+v.lines.map((l,i)=>`<label>${esc(l.name)} (max ${l.qty-(l.returned||0)})</label>${l.serials&&l.serials.length?l.serials.filter(s=>!(l.retS||[]).includes(s)).map(s=>'<label style="display:block"><input type="checkbox" class="rs" data-i="'+i+'" value="'+esc(s)+'" style="width:auto"> '+esc(s)+'</label>').join(''):'<input type="number" min="0" inputmode="numeric" id="r_'+i+'" value="0">'}`).join('')+'<button class="btn" id="r_s">Create credit note</button>';
+  $('#r_s').onclick=async()=>{const rl=[],UUr=await getAll('units');for(let i=0;i<v.lines.length;i++){const l=v.lines[i],hs=l.serials&&l.serials.length,q=hs?document.querySelectorAll('.rs[data-i="'+i+'"]:checked').length:(parseInt($('#r_'+i).value,10)||0);if(q<0||q>l.qty-(l.returned||0))return msg('Return quantity is too high for '+esc(l.name)+'.');if(q>0)rl.push({...l,qty:q,idx:i,serials:hs?[...document.querySelectorAll('.rs[data-i="'+i+'"]:checked')].map(c=>c.value):undefined})}
+   if(!rl.length)return msg('Enter at least one quantity.');
+   const c=calcS(rl,v.interstate,v.inclusive),at=new Date().toISOString(),number=await nextNo('credit_note'),cid=crypto.randomUUID();
+   const ops=[['invoices',{id:cid,type:'credit',number,invoiceId:id,customerId:v.customerId,date:tdy(),lines:c.lines,interstate:v.interstate,discount:c.discount,taxable:c.taxable,cgst:c.cgst,sgst:c.sgst,igst:c.igst,total:c.total,paid:0,status:'active',createdAt:at}]];
+   rl.forEach(l=>{v.lines[l.idx].returned=(v.lines[l.idx].returned||0)+l.qty;v.lines[l.idx].retS=[...(v.lines[l.idx].retS||[]),...(l.serials||[])];(l.serials||[]).forEach(s=>{const u=UUr.find(x=>x.serial===s&&x.productId===l.productId&&x.saleId===id);if(u)ops.push(['units',{...u,status:'instock',saleId:null,customerId:null}])});ops.push(['stock',{id:crypto.randomUUID(),productId:l.productId,date:tdy(),at,qty:l.qty,type:'sale_return',ref:number,note:''}])});
+   v.credited=r2((v.credited||0)+c.total);ops.push(['invoices',v]);await atomic(ops);await audit('CREDIT_NOTE',number+' '+money(c.total));salesView(m,cid)}};
+ $('#cx').onclick=async()=>{if(credits.length)return msg('This invoice has credit notes and cannot be cancelled.');
+  if(!confirm('Cancel '+v.number+'? Stock is restored and the invoice stays in history.'+(v.paid>0?' Payments already received must be refunded separately.':'')))return;
+  const at=new Date().toISOString();v.status='cancelled';v.cancelledAt=at;const ops=[['invoices',v]];
+  v.lines.forEach(l=>ops.push(['stock',{id:crypto.randomUUID(),productId:l.productId,date:tdy(),at,qty:l.qty,type:'sale_cancel',ref:v.number,note:''}]));
+  const UU=await getAll('units');v.lines.forEach(l=>(l.serials||[]).forEach(s=>{const u=UU.find(x=>x.serial===s&&x.productId===l.productId&&x.saleId===id);if(u)ops.push(['units',{...u,status:'instock',saleId:null,customerId:null}])}));
+  await atomic(ops);await audit('SALE_CANCELLED',v.number);saleDoc(m,id)}}
+const MS={available:'Available',reserved:'Reserved',rented:'Rented',maintenance:'Under maintenance',damaged:'Damaged',retired:'Retired'};
+const UN={day:1,week:7,month:30};
+const dBetween=(a,b)=>Math.max(1,Math.round((new Date(b)-new Date(a))/864e5));
+const addDays=(d,n)=>new Date(new Date(d).getTime()+n*864e5).toISOString().slice(0,10);
+const rAmt=(days,unit,rate)=>unit==='flat'?rate:Math.ceil(days/UN[unit])*rate;
+const rTot=r=>{let t=0,x=0;(r.charges||[]).forEach(c=>{t+=c.taxable;x+=c.tax});return {taxable:r2(t),tax:r2(x),total:r2(t+x)}};
+const rPaid=r=>r2((r.payments||[]).reduce((s,p)=>s+p.amount,0));
+const rBal=r=>r2(rTot(r).total-rPaid(r)-(r.depositApplied||0));
+async function mkCharge(desc,taxable,gst,date){const t=r2(taxable),tax=r2(t*gst/100);return {id:crypto.randomUUID(),date:date||tdy(),desc,taxable:t,gst,tax,total:r2(t+tax),inv:await nextNo('rental_invoice')}}
+async function clash(mid,start,end,exceptId){const t=tdy();return (await getAll('rentals')).find(r=>r.machineId===mid&&r.id!==exceptId&&(r.status==='reserved'||r.status==='active')&&start<=(r.status==='active'&&r.expectedReturn<t?t:r.expectedReturn)&&end>=r.start)}
+const freeSt=(mid,exceptId,rs)=>rs.some(r=>r.machineId===mid&&r.id!==exceptId&&r.status==='reserved')?'reserved':'available';
+async function rentSummary(){const rs=await getAll('rentals'),t=tdy(),mo=t.slice(0,7),live=rs.filter(r=>r.status!=='cancelled'),ch=live.flatMap(r=>r.charges||[]),s=a=>money(r2(a.reduce((x,c)=>x+c.taxable,0)));return [['Rental income today',s(ch.filter(c=>c.date===t))],['Rental income (month)',s(ch.filter(c=>c.date.startsWith(mo)))],['Overdue returns',rs.filter(r=>r.status==='active'&&r.expectedReturn<t).length],['Rental outstanding',money(r2(live.reduce((x,r)=>x+Math.max(0,rBal(r)),0)))]]}
+async function machinesView(m,id){
+ if(id==='')return machForm(m);
+ if(id)return machDoc(m,id);
+ const ps=Object.fromEntries((await getAll('products')).map(p=>[p.id,p.name]));
+ const a=(await getAll('machines')).filter(x=>x.active!==false).sort((x,y)=>x.serial.localeCompare(y.serial));
+ m.innerHTML='<button class="btn" id="add">+ New machine</button><div id="lst"></div>';
+ $('#lst').innerHTML=a.length?a.map(x=>rowCard(x.id,x.serial+' · '+(ps[x.productId]||''),MS[x.status])).join(''):'<p style="color:var(--mut)">No machines yet.</p>';
+ document.querySelectorAll('#lst .card').forEach(e=>e.onclick=()=>machinesView(m,e.dataset.id));$('#add').onclick=()=>machinesView(m,'')}
+async function machForm(m){
+ const ps=(await getAll('products')).filter(p=>p.active!==false&&p.kind==='rental');
+ if(!ps.length){m.innerHTML='<div class="alert">First add a product of type Rental equipment under Products.</div>';return}
+ m.innerHTML=`<div class="card"><h2>New machine</h2><label>Model</label><select id="m_p">${ps.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select>${field('m_s','Serial number *','')}${field('m_n','Notes','')}<div id="msg"></div><button class="btn" id="sv">Save</button><button class="btn alt" id="bk">Back</button></div>`;
+ $('#bk').onclick=()=>machinesView(m);
+ $('#sv').onclick=async()=>{const s=$('#m_s').value.trim(),bad=t=>$('#msg').innerHTML='<div class="alert bad">'+t+'</div>';
+  if(!s)return bad('Serial number is required.');
+  if((await getAll('machines')).some(x=>x.serial.toLowerCase()===s.toLowerCase()))return bad('This serial number already exists.');
+  await putOne('machines',{id:crypto.randomUUID(),productId:$('#m_p').value,serial:s,notes:$('#m_n').value.trim(),status:'available',active:true,createdAt:new Date().toISOString()});await audit('MACHINE_CREATED',s);machinesView(m)}}
+async function machDoc(m,id){
+ const [x,rs,cs,ps]=await Promise.all([getOne('machines',id),getAll('rentals'),getAll('customers'),getAll('products')]);
+ const cn=Object.fromEntries(cs.map(c=>[c.id,c.name])),pn=(ps.find(p=>p.id===x.productId)||{}).name;
+ const h=rs.filter(r=>r.machineId===id).sort((a,b)=>b.start.localeCompare(a.start));
+ const free=['available','maintenance','damaged','retired'].includes(x.status);
+ m.innerHTML=`<div class="card"><h2>${esc(x.serial)}</h2><p>${esc(pn)}<br>Status: <b>${MS[x.status]}</b><br>${esc(x.notes)}</p>${free?`<label>Change status</label><select id="m_st">${['available','maintenance','damaged','retired'].map(k=>`<option value="${k}" ${k===x.status?'selected':''}>${MS[k]}</option>`).join('')}</select><button class="btn" id="sv">Update status</button>`:'<p style="font-size:13px;color:var(--mut)">Status changes automatically while rented or reserved.</p>'}<button class="btn alt" id="bk">Back</button></div><div class="card"><h2>Rental history</h2><div class="scroll"><table><tr><th>No.</th><th>Customer</th><th>Dates</th><th>Status</th></tr>${h.map(r=>`<tr><td>${esc(r.number)}</td><td>${esc(cn[r.customerId])}</td><td>${r.start} to ${r.actualReturn||r.expectedReturn}</td><td>${r.status}</td></tr>`).join('')||'<tr><td colspan=4>No rentals yet</td></tr>'}</table></div></div>`;
+ $('#bk').onclick=()=>machinesView(m);
+ if(free)$('#sv').onclick=async()=>{x.status=$('#m_st').value;await putOne('machines',x);await audit('MACHINE_STATUS',x.serial+' '+x.status);machDoc(m,id)}}
+async function rentalsView(m,id){
+ if(id==='')return rentForm(m);
+ if(id)return rentDoc(m,id);
+ const [rs,cs,ms]=await Promise.all([getAll('rentals'),getAll('customers'),getAll('machines')]);
+ const cn=Object.fromEntries(cs.map(c=>[c.id,c.name])),sn=Object.fromEntries(ms.map(x=>[x.id,x.serial])),t=tdy();
+ rs.sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
+ m.innerHTML='<button class="btn" id="add">+ New rental</button><div id="lst"></div>';
+ $('#lst').innerHTML=rs.length?rs.map(r=>rowCard(r.id,r.number+' · '+(cn[r.customerId]||''),(sn[r.machineId]||'')+' · '+r.start+' to '+r.expectedReturn+' · '+r.status.toUpperCase()+(r.status==='active'&&r.expectedReturn<t?' · OVERDUE':'')+(r.status!=='cancelled'&&rBal(r)>0?' · due '+money(rBal(r)):''))).join(''):'<p style="color:var(--mut)">No rentals yet.</p>';
+ document.querySelectorAll('#lst .card').forEach(e=>e.onclick=()=>rentalsView(m,e.dataset.id));$('#add').onclick=()=>rentalsView(m,'')}
+async function rentForm(m){
+ const [cs,ms,ps,co]=await Promise.all([getAll('customers'),getAll('machines'),getAll('products'),getOne('settings','company')]);
+ const C=cs.filter(c=>c.active!==false),M=ms.filter(x=>x.active!==false&&['available','reserved','rented'].includes(x.status)),pr=Object.fromEntries(ps.map(p=>[p.id,p]));
+ if(!C.length||!M.length){m.innerHTML='<div class="alert">Add at least one customer and one machine that is not under maintenance, damaged or retired.</div>';return}
+ m.innerHTML=`<div class="card"><h2>New rental</h2><label>Customer</label><select id="r_c">${C.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select><label>Machine</label><select id="r_m">${M.map(x=>`<option value="${x.id}">${esc(x.serial)} · ${esc(pr[x.productId]&&pr[x.productId].name)} (${MS[x.status]})</option>`).join('')}</select>${field('r_s','Start date',tdy(),'date')}${field('r_e','Expected return',addDays(tdy(),7),'date')}<label>Charge basis</label><select id="r_u"><option value="day">Per day</option><option value="week">Per week</option><option value="month">Per month (30 days)</option><option value="flat">Custom flat charge</option></select>${field('r_r','Rate / charge (excl. GST)','','number','inputmode="decimal" step="0.01" min="0"')}${field('r_g','GST %','','number','inputmode="decimal" min="0" max="28" step="0.01"')}${field('r_d','Security deposit','0','number','inputmode="decimal" min="0"')}${field('r_a','Payment received now','0','number','inputmode="decimal" min="0"')}<label>Payment method</label><select id="r_pm">${PAYM.map(x=>`<option>${x}</option>`).join('')}</select><div id="tt"></div><div id="msg"></div><button class="btn" id="sv">Create rental</button><button class="btn alt" id="bk">Back</button></div>`;
+ const inter=()=>{const c=C.find(x=>x.id===$('#r_c').value);return (c.state||'').trim().toLowerCase()!==(co.state||'').trim().toLowerCase()};
+ const cc=()=>{const s=$('#r_s').value,e=$('#r_e').value,u=$('#r_u').value,rt=+$('#r_r').value||0,g=+$('#r_g').value||0,d=s&&e&&e>=s?dBetween(s,e):0,tx=r2(rAmt(d,u,rt)),tax=r2(tx*g/100);return {d,tx,tax,tot:r2(tx+tax)}};
+ const tot=()=>{const c=cc();$('#tt').innerHTML=`<p style="font-size:14px">${c.d} day(s) · Rent ${money(c.tx)} · GST ${money(c.tax)} (${inter()?'IGST':'CGST+SGST'}) · <b>Total ${money(c.tot)}</b></p>`};
+ const fill=()=>{const p=pr[(M.find(x=>x.id===$('#r_m').value)||{}).productId]||{};if($('#r_u').value==='day')$('#r_r').value=p.rentalPrice||'';$('#r_g').value=p.gst??'';tot()};
+ ['r_c','r_s','r_e','r_r','r_g'].forEach(k=>$('#'+k).oninput=$('#'+k).onchange=tot);$('#r_m').onchange=$('#r_u').onchange=fill;fill();
+ $('#bk').onclick=()=>rentalsView(m);
+ $('#sv').onclick=async()=>{const bad=t=>$('#msg').innerHTML='<div class="alert bad">'+t+'</div>';
+  const s=$('#r_s').value,e=$('#r_e').value,mid=$('#r_m').value,u=$('#r_u').value,rt=+$('#r_r').value,gv=$('#r_g').value,g=gv===''?NaN:+gv,dep=r2(+$('#r_d').value||0),adv=r2(+$('#r_a').value||0),c=cc();
+  if(!s||!e||e<s)return bad('Check the start and return dates.');
+  if(!(rt>0))return bad('Enter the rental rate.');
+  if(!(g>=0&&g<=28))return bad('Enter GST between 0 and 28.');
+  if(dep<0||adv<0||adv>c.tot)return bad('Deposit and payment must be valid, and payment cannot exceed the rent total.');
+  const k=await clash(mid,s,e);if(k)return bad('This machine is already booked from '+k.start+' to '+k.expectedReturn+' ('+esc(k.number)+').');
+  const mach=M.find(x=>x.id===mid),now=s<=tdy(),ch=await mkCharge('Rent '+s+' to '+e+' ('+(u==='flat'?'flat':'per '+u)+')',c.tx,g),number=await nextNo('rental_agreement'),id=crypto.randomUUID();
+  const pays=adv>0?[{id:crypto.randomUUID(),date:tdy(),amount:adv,method:$('#r_pm').value,receipt:await nextNo('payment_receipt'),kind:'advance'}]:[];
+  const r={id,number,customerId:$('#r_c').value,machineId:mid,start:s,expectedReturn:e,unit:u,rate:rt,gst:g,interstate:inter(),deposit:dep,depositApplied:0,depositRefunded:0,charges:[ch],payments:pays,history:[{date:tdy(),event:'Created'}],status:now?'active':'reserved',createdAt:new Date().toISOString()};
+  if(now)mach.status='rented';else if(mach.status==='available')mach.status='reserved';
+  await atomic([['rentals',r],['machines',mach]]);await audit('RENTAL_CREATED',number);rentalsView(m,id)}}
+async function rentDoc(m,id){
+ const [r,co,cs,ms,ps,rs]=await Promise.all([getOne('rentals',id),getOne('settings','company'),getAll('customers'),getAll('machines'),getAll('products'),getAll('rentals')]);
+ const cu=cs.find(c=>c.id===r.customerId)||{},mc=ms.find(x=>x.id===r.machineId)||{},pn=(ps.find(p=>p.id===mc.productId)||{}).name,T=rTot(r),pd=rPaid(r),bal=rBal(r),act=r.status==='active',res=r.status==='reserved';
+ m.innerHTML=`<div class="card"><div style="text-align:center"><b style="font-size:18px">${esc(co.name)}</b><br>${esc(co.address)}<br>${co.gstin?'GSTIN: '+esc(co.gstin):''} ${esc(co.phone)}</div><h2 style="text-align:center;margin-top:12px">RENTAL AGREEMENT ${r.status==='cancelled'?'(CANCELLED)':''}</h2><p style="font-size:14px"><b>${esc(r.number)}</b> · Status: <b>${r.status.toUpperCase()}</b><br>Customer: <b>${esc(cu.name)}</b> · ${esc(cu.mobile)}<br>${esc(cu.address)} ${esc(cu.district)}<br>Equipment: ${esc(pn)} · Serial <b>${esc(mc.serial)}</b><br>Period: ${r.start} to ${r.expectedReturn}${r.actualReturn?' (returned '+r.actualReturn+')':''}<br>Rate: ${money(r.rate)} ${r.unit==='flat'?'flat':'per '+r.unit}<br>Security deposit: ${money(r.deposit)}${r.status==='returned'?' · applied '+money(r.depositApplied)+' · <b>to refund '+money(r.depositRefunded)+'</b>':''}</p><div class="scroll"><table><tr><th>Date</th><th>Inv</th><th>Description</th><th>Taxable</th><th>GST</th><th>Total</th></tr>${r.charges.map(c=>`<tr><td>${c.date}</td><td>${esc(c.inv)}</td><td>${esc(c.desc)}</td><td>${money(c.taxable)}</td><td>${c.gst}%</td><td>${money(c.total)}</td></tr>`).join('')}</table></div><p style="text-align:right">Taxable ${money(T.taxable)}<br>${r.interstate?'IGST '+money(T.tax):'CGST '+money(r2(T.tax/2))+' · SGST '+money(r2(T.tax/2))}<br><b>Total ${money(T.total)}</b><br>Paid ${money(pd)}${r.depositApplied?' · Deposit applied '+money(r.depositApplied):''}<br><b>Balance due ${money(bal)}</b></p>${r.payments.length?'<p style="font-size:13px">Receipts: '+r.payments.map(p=>p.date+' '+money(p.amount)+' '+p.method+' ('+esc(p.receipt)+')').join('; ')+'</p>':''}<p style="font-size:12px;color:var(--mut)">History: ${r.history.map(h=>h.date+' '+esc(h.event)).join(' · ')}</p><table style="margin-top:26px"><tr><td style="border:0">Customer signature<br><br>________________</td><td style="border:0;text-align:right">For ${esc(co.name)}<br><br>________________</td></tr></table><div class="noprint"><div id="act"></div><div id="msg"></div><button class="btn" id="pr">Print / Save as PDF</button><button class="btn alt" id="sh">Share</button><button class="btn alt" id="dn">Delivery note</button>${r.status!=='cancelled'&&bal>0?'<button class="btn alt" id="pay">Record payment</button>':''}${res?'<button class="btn alt" id="st">Start rental now</button>':''}${act?'<button class="btn alt" id="ex">Extend / bill next period</button><button class="btn alt" id="rt">Return machine</button><button class="btn alt" id="rp">Replace machine</button>':''}${act||res?'<button class="btn alt" id="cx" style="color:var(--bad);border-color:var(--bad)">Cancel rental</button>':''}<button class="btn alt" id="bk">Back</button></div></div>`;
+ const msg=(t,k='bad')=>$('#msg').innerHTML='<div class="alert '+k+'">'+t+'</div>',done=async(ops,a,d)=>{await atomic(ops);await audit(a,d);rentDoc(m,id)};
+ $('#bk').onclick=()=>rentalsView(m);
+ $('#pr').onclick=()=>{try{window.print()}catch(e){msg('Printing is blocked here. Take a screenshot instead.')}};
+ $('#sh').onclick=async()=>{const t=co.name+' rental '+r.number+', '+r.start+' to '+r.expectedReturn+'. Total '+money(T.total)+', balance due '+money(bal);try{if(navigator.share)await navigator.share({title:r.number,text:t});else{await navigator.clipboard.writeText(t);msg('Summary copied.','ok')}}catch(e){}};
+ if($('#dn'))$('#dn').onclick=()=>dnDoc(m,'rental',id);
+ if($('#pay'))$('#pay').onclick=()=>{$('#act').innerHTML=field('y_a','Amount',Math.max(0,bal),'number','inputmode="decimal" step="0.01"')+`<label>Method</label><select id="y_m">${PAYM.map(x=>`<option>${x}</option>`).join('')}</select><button class="btn" id="y_s">Save payment</button>`;
+  $('#y_s').onclick=async()=>{const a=r2(+$('#y_a').value);if(!(a>0&&a<=bal))return msg('Amount must be above 0 and not more than the balance.');r.payments.push({id:crypto.randomUUID(),date:tdy(),amount:a,method:$('#y_m').value,receipt:await nextNo('payment_receipt'),kind:'payment'});done([['rentals',r]],'RENTAL_PAYMENT',r.number+' '+money(a))}};
+ if($('#st'))$('#st').onclick=()=>{const o=rs.find(x=>x.machineId===r.machineId&&x.id!==id&&x.status==='active');if(o)return msg('Machine is still out on '+esc(o.number)+'.');r.status='active';r.history.push({date:tdy(),event:'Started'});mc.status='rented';done([['rentals',r],['machines',mc]],'RENTAL_STARTED',r.number)};
+ if($('#ex'))$('#ex').onclick=()=>{const pre=nd=>nd>r.expectedReturn&&r.unit!=='flat'?rAmt(dBetween(r.expectedReturn,nd),r.unit,r.rate):'';$('#act').innerHTML=field('e_d','New return date',addDays(r.expectedReturn,UN[r.unit]||7),'date')+field('e_a','Extra charge (excl. GST)',pre(addDays(r.expectedReturn,UN[r.unit]||7)),'number','inputmode="decimal" step="0.01"')+'<button class="btn" id="e_s">Extend and bill</button>';
+  $('#e_d').onchange=()=>$('#e_a').value=pre($('#e_d').value);
+  $('#e_s').onclick=async()=>{const nd=$('#e_d').value,a=+$('#e_a').value;if(!(nd>r.expectedReturn))return msg('New date must be after '+r.expectedReturn+'.');if(!(a>0))return msg('Enter the extra charge.');
+   const k=await clash(r.machineId,r.expectedReturn,nd,id);if(k)return msg('Machine is booked from '+k.start+' ('+esc(k.number)+').');
+   r.charges.push(await mkCharge('Extension to '+nd,a,r.gst));r.history.push({date:tdy(),event:'Extended to '+nd});r.expectedReturn=nd;done([['rentals',r]],'RENTAL_EXTENDED',r.number+' '+nd)}};
+ if($('#rt'))$('#rt').onclick=()=>{const t=tdy(),ld=r.expectedReturn<t?dBetween(r.expectedReturn,t):0,pdy=r.unit==='flat'?0:r.rate/UN[r.unit];
+  $('#act').innerHTML=field('t_d','Return date',t,'date')+'<label>Machine condition</label><select id="t_c"><option value="ok">Good - ready to rent</option><option value="maint">Needs maintenance</option><option value="dmg">Damaged</option></select>'+field('t_l','Late charge (excl. GST, edit if needed)',r2(ld*pdy),'number','step="0.01"')+field('t_g','Damage charge (no GST)',0,'number','step="0.01"')+'<button class="btn" id="t_s">Complete return</button>';
+  $('#t_s').onclick=async()=>{const rd=$('#t_d').value,late=r2(+$('#t_l').value||0),dmg=r2(+$('#t_g').value||0),cd=$('#t_c').value;if(!rd||rd<r.start)return msg('Check the return date.');if(late<0||dmg<0)return msg('Charges cannot be negative.');
+   if(late>0)r.charges.push(await mkCharge('Late return charge',late,r.gst,rd));if(dmg>0)r.charges.push(await mkCharge('Damage charge',dmg,0,rd));
+   const due=Math.max(0,rBal(r));r.depositApplied=r2(Math.min(r.deposit,due));r.depositRefunded=r2(r.deposit-r.depositApplied);r.status='returned';r.actualReturn=rd;r.history.push({date:rd,event:'Returned'});
+   mc.status=cd==='ok'?freeSt(mc.id,id,rs):cd==='maint'?'maintenance':'damaged';done([['rentals',r],['machines',mc]],'RENTAL_RETURNED',r.number)}};
+ if($('#rp'))$('#rp').onclick=()=>{const O=ms.filter(x=>x.active!==false&&x.id!==mc.id&&['available','reserved','rented'].includes(x.status));if(!O.length)return msg('No other machine is available.');
+  $('#act').innerHTML='<label>Replace with</label><select id="p_m">'+O.map(x=>`<option value="${x.id}">${esc(x.serial)} (${MS[x.status]})</option>`).join('')+'</select><label>Old machine is now</label><select id="p_o"><option value="available">Available</option><option value="maintenance">Under maintenance</option><option value="damaged">Damaged</option></select><button class="btn" id="p_s">Replace</button>';
+  $('#p_s').onclick=async()=>{const nm=ms.find(x=>x.id===$('#p_m').value),k=await clash(nm.id,tdy(),r.expectedReturn,id);if(k)return msg('That machine is booked from '+k.start+' ('+esc(k.number)+').');
+   const os=$('#p_o').value;r.machineId=nm.id;r.history.push({date:tdy(),event:'Machine replaced: '+mc.serial+' to '+nm.serial});mc.status=os==='available'?freeSt(mc.id,id,rs):os;nm.status='rented';done([['rentals',r],['machines',mc],['machines',nm]],'RENTAL_REPLACED',r.number)}};
+ if($('#cx'))$('#cx').onclick=()=>{if(!confirm('Cancel '+r.number+'? The record stays in history. Any money received must be refunded separately.'))return;const was=r.status;r.status='cancelled';r.history.push({date:tdy(),event:'Cancelled'});
+  if(was==='active'||mc.status==='reserved')mc.status=freeSt(mc.id,id,rs);done([['rentals',r],['machines',mc]],'RENTAL_CANCELLED',r.number)}}
+const CHART=[['cash','Cash in hand','asset'],['bank','Bank account','asset'],['receivables','Customer receivables','asset'],['inventory','Inventory (saleable stock)','asset'],['fixed_assets','Fixed assets (rental equipment)','asset'],['acc_dep','Accumulated depreciation','asset'],['gst_in','GST input credit','asset'],['payables','Supplier payables','liability'],['gst_out','GST output payable','liability'],['deposits','Security deposits held','liability'],['capital','Owner capital','equity'],['sales','Sales','income'],['rental_income','Rental income','income'],['service_income','Service income','income'],['cogs','Cost of goods sold','expense'],['dep_exp','Depreciation','expense'],['exp_rent','Rent','expense'],['exp_salary','Salaries','expense'],['exp_transport','Transport','expense'],['exp_utilities','Utilities','expense'],['exp_repairs','Repairs and maintenance','expense'],['exp_other','Other expenses','expense']];
+async function ensureChart(){const a=await getAll('accounts');for(const [id,name,group] of CHART)if(!a.some(x=>x.id===id))await putOne('accounts',{id,name,group,system:true,active:true})}
+const bals=vs=>{const b={};vs.forEach(v=>v.lines.forEach(l=>b[l.a]=r2((b[l.a]||0)+l.dr-l.cr)));return b};
+const mkV=(refKey,type,number,date,narration,lines,auto=true)=>({id:crypto.randomUUID(),refKey,type,number,date,narration,lines:lines.map(([a,dr,cr])=>({a,dr:r2(dr||0),cr:r2(cr||0)})).filter(l=>l.dr>0||l.cr>0),auto,status:'posted',createdAt:new Date().toISOString()});
+function chk(lines){if(lines.length<2)return 'A voucher needs at least two lines.';if(lines.some(l=>!l.a||l.dr<0||l.cr<0||(l.dr>0&&l.cr>0)))return 'Each line needs an account and either a debit or a credit.';const d=r2(lines.reduce((s,l)=>s+l.dr,0)),c=r2(lines.reduce((s,l)=>s+l.cr,0));return d!==c?'Debits ('+money(d)+') and credits ('+money(c)+') must be equal.':''}
+async function syncLedger(){
+ await ensureChart();
+ const [vs,inv,pur,rs,ps]=await Promise.all(['vouchers','invoices','purchases','rentals','products'].map(getAll));
+ const have=new Set(vs.map(v=>v.refKey)),pm=Object.fromEntries(ps.map(p=>[p.id,p])),out=[];window.LEDGER_ERR=[];
+ const add=(k,type,no,date,nar,lines)=>{if(have.has(k))return;const v=mkV(k,type,no,date,nar,lines),e=chk(v.lines);if(e){window.LEDGER_ERR.push(no+': '+e);return}have.add(k);out.push(v)};
+ const rev=(k,type,no,date,nar)=>{const o=[...vs,...out].find(x=>x.refKey===k);if(o)add('rev:'+k,type,no,date,nar,o.lines.map(l=>[l.a,l.cr,l.dr]))};
+ const ac=m=>m==='Cash'?'cash':'bank',cost=l=>r2((+l.qty||0)*((pm[l.productId]||{}).purchasePrice||0));
+ for(const v of inv){const ct=r2(v.lines.reduce((s,l)=>s+cost(l),0)),tax=r2(v.total-v.taxable);
+  if(v.type==='credit'){add('credit:'+v.id,'Credit note',v.number,v.date,'Sales return',[['sales',v.taxable,0],['gst_out',tax,0],['receivables',0,v.total],['inventory',ct,0],['cogs',0,ct]]);continue}
+  add('sale:'+v.id,'Sales',v.number,v.date,'Sales invoice',[['receivables',v.total,0],['sales',0,v.taxable],['gst_out',0,tax],['cogs',ct,0],['inventory',0,ct]]);
+  (v.payments||[]).forEach(p=>add('salepay:'+p.id,'Receipt',p.receipt,p.date,'Payment for '+v.number,[[ac(p.method),p.amount,0],['receivables',0,p.amount]]));
+  if(v.status==='cancelled')rev('sale:'+v.id,'Sales (cancelled)',v.number,(v.cancelledAt||'').slice(0,10)||v.date,'Cancelled '+v.number)}
+ for(const p of pur){let ra=r2(p.lines.reduce((s,l)=>s+((pm[l.productId]||{}).kind==='rental'?l.qty*l.rate:0),0)),ia=r2(p.taxable-ra);if(ia<0){ia=0;ra=p.taxable}
+  add('pur:'+p.id,'Purchase',p.number,p.date,'Purchase '+p.supplierInvoiceNo,[['inventory',ia,0],['fixed_assets',ra,0],['gst_in',r2(p.total-p.taxable),0],['payables',0,p.total]]);
+  if(p.status==='cancelled')rev('pur:'+p.id,'Purchase (cancelled)',p.number,(p.cancelledAt||'').slice(0,10)||p.date,'Cancelled '+p.number)}
+ for(const r of rs){const lastD=(r.history.slice(-1)[0]||{}).date;
+  r.charges.forEach(c=>{add('rentch:'+c.id,'Rental invoice',c.inv,c.date,'Rental '+r.number+': '+c.desc,[['receivables',c.total,0],['rental_income',0,c.taxable],['gst_out',0,c.tax]]);if(r.status==='cancelled')rev('rentch:'+c.id,'Rental (cancelled)',c.inv,lastD||c.date,'Cancelled '+r.number)});
+  r.payments.forEach(p=>add('rentpay:'+p.id,'Receipt',p.receipt,p.date,'Rental '+r.number,[[ac(p.method),p.amount,0],['receivables',0,p.amount]]));
+  if(r.deposit>0){add('rentdep:'+r.id,'Receipt',r.number,r.createdAt.slice(0,10),'Security deposit '+r.number,[['cash',r.deposit,0],['deposits',0,r.deposit]]);
+   if(r.status==='returned')add('rentret:'+r.id,'Deposit settlement',r.number,r.actualReturn,'Deposit settled '+r.number,[['deposits',r.deposit,0],['receivables',0,r.depositApplied],['cash',0,r.depositRefunded]]);
+   if(r.status==='cancelled')add('rentdepcx:'+r.id,'Payment',r.number,lastD||tdy(),'Deposit returned '+r.number,[['deposits',r.deposit,0],['cash',0,r.deposit]])}}
+ if(out.length){const t=db.transaction('vouchers','readwrite');out.forEach(v=>t.objectStore('vouchers').put(v));await new Promise((a,b)=>{t.oncomplete=a;t.onerror=()=>b(t.error)})}
+ return out.length}
+async function acctSummary(){await syncLedger();const [vs,ac]=await Promise.all([getAll('vouchers'),getAll('accounts')]),b=bals(vs),mb=bals(vs.filter(v=>v.date.startsWith(tdy().slice(0,7))));let inc=0,ex=0;ac.forEach(a=>{const x=mb[a.id]||0;if(a.group==='income')inc-=x;if(a.group==='expense')ex+=x});return [['Cash balance',money(b.cash||0)],['Bank balance',money(b.bank||0)],['Monthly profit',money(r2(inc-ex))]]}
+let AS={s:'tb',a:null};
+const SECS=[['tb','Trial balance'],['vch','Vouchers'],['new','New voucher'],['sup','Pay supplier'],['ref','Refund'],['acc','New account']];
+async function acctView(m,s,a){
+ if(s)AS={s,a};
+ await syncLedger();
+ m.innerHTML=`<div class="noprint" style="display:flex;gap:6px;overflow-x:auto;margin-bottom:10px">${SECS.map(([k,l])=>`<button class="btn ${AS.s===k?'':'alt'}" data-s="${k}" style="margin:0;width:auto;white-space:nowrap;padding:10px 12px;min-height:40px;font-size:14px">${l}</button>`).join('')}</div><div id="sec"></div>`;
+ document.querySelectorAll('[data-s]').forEach(b=>b.onclick=()=>acctView(m,b.dataset.s,null));
+ const f={tb:tbView,led:ledView,vch:vchView,vd:vdView,new:newVch,sup:supPay,ref:refundForm,acc:acctForm}[AS.s];await f($('#sec'),AS.a,m)}
+async function tbView(e,a,m){
+ const [ac,vs]=await Promise.all([getAll('accounts'),getAll('vouchers')]),b=bals(vs);let D=0,C=0;
+ const rows=ac.filter(x=>x.active!==false).map(x=>{const v=b[x.id]||0;if(v>0)D+=v;else C-=v;return `<tr data-id="${x.id}"><td>${esc(x.name)}<br><small>${x.group}</small></td><td>${v>0?money(v):''}</td><td>${v<0?money(-v):''}</td></tr>`}).join('');
+ e.innerHTML=(window.LEDGER_ERR&&LEDGER_ERR.length?'<div class="alert bad">Not posted (unbalanced): '+LEDGER_ERR.map(esc).join('; ')+'</div>':'')+`<div class="card"><h2>Trial balance</h2><div class="scroll"><table><tr><th>Account (tap for ledger)</th><th>Debit</th><th>Credit</th></tr>${rows}<tr><td><b>Total</b></td><td><b>${money(D)}</b></td><td><b>${money(C)}</b></td></tr></table></div>${r2(D)===r2(C)?'<div class="alert ok">Books balance.</div>':'<div class="alert bad">Trial balance does not agree.</div>'}<p style="font-size:12px;color:var(--mut)">Sales, purchases, rentals and their payments post here automatically. Purchases of saleable stock go to Inventory and rental equipment to Fixed assets. Stock cost uses the product purchase price. Opening balances can be entered as a journal voucher.</p></div>`;
+ e.querySelectorAll('tr[data-id]').forEach(t=>t.onclick=()=>acctView(m,'led',t.dataset.id))}
+async function ledView(e,id){
+ const [a,vs]=await Promise.all([getOne('accounts',id),getAll('vouchers')]);let run=0;
+ const rows=vs.filter(v=>v.lines.some(l=>l.a===id)).sort((x,y)=>x.date.localeCompare(y.date)||x.createdAt.localeCompare(y.createdAt)).flatMap(v=>v.lines.filter(l=>l.a===id).map(l=>{run=r2(run+l.dr-l.cr);return `<tr><td>${v.date}</td><td>${esc(v.number)}<br><small>${esc(v.type)}</small></td><td>${l.dr?money(l.dr):''}</td><td>${l.cr?money(l.cr):''}</td><td>${money(run)}</td></tr>`}));
+ e.innerHTML=`<div class="card"><h2>${esc(a.name)} ledger</h2><div class="scroll"><table><tr><th>Date</th><th>Voucher</th><th>Dr</th><th>Cr</th><th>Balance</th></tr>${rows.join('')||'<tr><td colspan=5>No entries</td></tr>'}</table></div><p style="font-size:12px;color:var(--mut)">Positive balance = debit, negative = credit.</p></div>`}
+async function vchView(e,a,m){
+ const vs=(await getAll('vouchers')).sort((x,y)=>y.createdAt.localeCompare(x.createdAt)).slice(0,60);
+ e.innerHTML=vs.map(v=>rowCard(v.id,v.number+' · '+v.type+' · '+money(v.lines.reduce((s,l)=>s+l.dr,0)),v.date+' · '+v.narration+(v.reversedBy?' · REVERSED':''))).join('')||'<p style="color:var(--mut)">No vouchers yet.</p>';
+ e.querySelectorAll('.card').forEach(c=>c.onclick=()=>acctView(m,'vd',c.dataset.id))}
+async function vdView(e,id,m){
+ const [v,ac]=await Promise.all([getOne('vouchers',id),getAll('accounts')]),nm=Object.fromEntries(ac.map(a=>[a.id,a.name]));
+ e.innerHTML=`<div class="card"><h2>${esc(v.number)} · ${esc(v.type)}</h2><p style="font-size:14px">${v.date}<br>${esc(v.narration)}${v.reversedBy?'<br><b>Reversed</b>':''}</p><table><tr><th>Account</th><th>Dr</th><th>Cr</th></tr>${v.lines.map(l=>`<tr><td>${esc(nm[l.a])}</td><td>${l.dr?money(l.dr):''}</td><td>${l.cr?money(l.cr):''}</td></tr>`).join('')}</table><div id="msg"></div>${v.auto?'<p style="font-size:12px;color:var(--mut)">Created from a document or payment. Cancel the document to reverse it.</p>':!v.reversedBy&&!v.reversalOf?'<button class="btn alt" id="rv" style="color:var(--bad);border-color:var(--bad)">Reverse voucher</button>':''}<button class="btn alt" id="bk">Back</button></div>`;
+ $('#bk').onclick=()=>acctView(m,'vch');
+ if($('#rv'))$('#rv').onclick=async()=>{if(!confirm('Reverse '+v.number+'? A reversing voucher is posted and both stay in history.'))return;const r=mkV('rev:'+v.id,'Reversal','',tdy(),'Reversal of '+v.number,v.lines.map(l=>[l.a,l.cr,l.dr]),false);r.number=await nextNo('journal');r.reversalOf=v.id;v.reversedBy=r.id;await atomic([['vouchers',r],['vouchers',v]]);await audit('VOUCHER_REVERSED',v.number);acctView(m,'vd',id)}}
+async function newVch(e,a,m){
+ const ac=(await getAll('accounts')).filter(x=>x.active!==false),cb=ac.filter(x=>x.id==='cash'||x.id==='bank'),oth=ac.filter(x=>x.id!=='cash'&&x.id!=='bank');
+ const op=(L,s)=>L.map(x=>`<option value="${x.id}" ${x.id===s?'selected':''}>${esc(x.name)}</option>`).join('');
+ const TY={journal:'Journal',payment:'Payment (money out)',receipt:'Receipt (money in)',contra:'Contra (cash/bank transfer)',dep:'Depreciation'};
+ e.innerHTML=`<div class="card"><h2>New voucher</h2><label>Type</label><select id="v_t">${Object.entries(TY).map(([k,l])=>`<option value="${k}">${l}</option>`).join('')}</select><div id="vf"></div><div id="msg"></div><button class="btn" id="sv">Post voucher</button></div>`;
+ const J=[{a:oth[0].id,dr:'',cr:''},{a:oth[0].id,dr:'',cr:''}];
+ const draw=()=>{const t=$('#v_t').value;let h=field('v_d','Date',tdy(),'date')+field('v_n','Narration','');
+  if(t==='journal')h+=J.map((l,i)=>`<div style="border-top:1px solid var(--bd);margin-top:8px"><label>Account</label><select data-j="${i}" data-k="a">${op(ac,l.a)}</select><div class="grid"><div><label>Debit</label><input type="number" step="0.01" inputmode="decimal" data-j="${i}" data-k="dr" value="${l.dr}"></div><div><label>Credit</label><input type="number" step="0.01" inputmode="decimal" data-j="${i}" data-k="cr" value="${l.cr}"></div></div></div>`).join('')+'<button class="btn alt" id="jl">+ Add line</button>';
+  else if(t==='dep')h+=field('v_a','Depreciation amount','','number','step="0.01"');
+  else{const [l1,l2]=t==='payment'?['Paid from','Paid to']:t==='receipt'?['Received into','Received from']:['From','To'];h+=`<label>${l1}</label><select id="v_x">${op(cb)}</select><label>${l2}</label><select id="v_y">${op(t==='contra'?cb:oth)}</select>`+field('v_a','Amount','','number','step="0.01" inputmode="decimal"')}
+  $('#vf').innerHTML=h;document.querySelectorAll('[data-j]').forEach(el=>el.onchange=()=>{J[el.dataset.j][el.dataset.k]=el.value});
+  if($('#jl'))$('#jl').onclick=()=>{J.push({a:oth[0].id,dr:'',cr:''});draw()}};
+ $('#v_t').onchange=draw;draw();
+ $('#sv').onclick=async()=>{const bad=t=>$('#msg').innerHTML='<div class="alert bad">'+t+'</div>',t=$('#v_t').value,d=$('#v_d').value,n=$('#v_n').value.trim();let L,key,type;
+  if(!d)return bad('Choose a date.');if(!n)return bad('Enter a narration.');
+  if(t==='journal'){L=J.map(l=>[l.a,+l.dr||0,+l.cr||0]);key='journal';type='Journal'}
+  else{const amt=+$('#v_a').value;if(!(amt>0))return bad('Enter an amount above 0.');
+   if(t==='dep'){L=[['dep_exp',amt,0],['acc_dep',0,amt]];key='journal';type='Depreciation'}
+   else{const x=$('#v_x').value,y=$('#v_y').value;if(x===y)return bad('Choose two different accounts.');
+    if(t==='payment'){L=[[y,amt,0],[x,0,amt]];key='payment_voucher';type='Payment'}else if(t==='receipt'){L=[[x,amt,0],[y,0,amt]];key='receipt_voucher';type='Receipt'}else{L=[[y,amt,0],[x,0,amt]];key='contra';type='Contra'}}}
+  const v=mkV('man:'+crypto.randomUUID(),type,'',d,n,L,false),er=chk(v.lines);if(er)return bad(er);
+  v.number=await nextNo(key);await atomic([['vouchers',v]]);await audit('VOUCHER_POSTED',v.number);acctView(m,'vch')}}
+async function supPay(e,a,m){
+ const [ss,ps]=await Promise.all([getAll('suppliers'),getAll('purchases')]),open=ps.filter(p=>p.status==='received'&&r2(p.total-p.paid)>0);
+ if(!open.length){e.innerHTML='<div class="alert ok">No outstanding supplier invoices.</div>';return}
+ const sn=Object.fromEntries(ss.map(s=>[s.id,s.name]));
+ e.innerHTML=`<div class="card"><h2>Pay supplier</h2><label>Purchase invoice</label><select id="s_p">${open.map(p=>`<option value="${p.id}">${esc(sn[p.supplierId])} · ${esc(p.number)} · due ${money(p.total-p.paid)}</option>`).join('')}</select>${field('s_a','Amount','','number','step="0.01" inputmode="decimal"')}<label>Method</label><select id="s_m">${PAYM.map(x=>`<option>${x}</option>`).join('')}</select>${field('s_d','Date',tdy(),'date')}<div id="msg"></div><button class="btn" id="sv">Record payment</button></div>`;
+ const fill=()=>{const p=open.find(x=>x.id===$('#s_p').value);$('#s_a').value=r2(p.total-p.paid)};$('#s_p').onchange=fill;fill();
+ $('#sv').onclick=async()=>{const p=open.find(x=>x.id===$('#s_p').value),amt=r2(+$('#s_a').value),due=r2(p.total-p.paid);
+  if(!(amt>0&&amt<=due))return $('#msg').innerHTML='<div class="alert bad">Amount must be above 0 and not more than '+money(due)+'.</div>';
+  const no=await nextNo('payment_voucher'),mt=$('#s_m').value,d=$('#s_d').value||tdy();
+  const v=mkV('suppay:'+crypto.randomUUID(),'Payment',no,d,'Paid '+sn[p.supplierId]+' for '+p.number,[['payables',amt,0],[mt==='Cash'?'cash':'bank',0,amt]]);
+  p.paid=r2(p.paid+amt);p.payments=(p.payments||[]).concat([{date:d,amount:amt,method:mt,voucher:no}]);
+  await atomic([['purchases',p],['vouchers',v],['payments',{id:crypto.randomUUID(),kind:'supplier',number:no,date:d,amount:amt,method:mt,supplierId:p.supplierId,purchaseId:p.id,createdAt:new Date().toISOString()}]]);await audit('SUPPLIER_PAYMENT',no+' '+money(amt));acctView(m,'vch')}}
+async function refundForm(e,a,m){
+ const cs=(await getAll('customers')).filter(c=>c.active!==false);
+ if(!cs.length){e.innerHTML='<div class="alert">No customers yet.</div>';return}
+ e.innerHTML=`<div class="card"><h2>Refund to customer</h2><p style="font-size:13px;color:var(--mut);margin-top:0">Use for money returned to a customer, for example after a cancelled invoice or rental.</p><label>Customer</label><select id="f_c">${cs.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select>${field('f_a','Amount','','number','step="0.01" inputmode="decimal"')}<label>Method</label><select id="f_m">${PAYM.map(x=>`<option>${x}</option>`).join('')}</select>${field('f_n','Reason','')}${field('f_d','Date',tdy(),'date')}<div id="msg"></div><button class="btn" id="sv">Record refund</button></div>`;
+ $('#sv').onclick=async()=>{const amt=r2(+$('#f_a').value),n=$('#f_n').value.trim(),cu=cs.find(c=>c.id===$('#f_c').value);
+  if(!(amt>0))return $('#msg').innerHTML='<div class="alert bad">Enter an amount above 0.</div>';if(!n)return $('#msg').innerHTML='<div class="alert bad">Enter a reason.</div>';
+  const no=await nextNo('payment_voucher'),mt=$('#f_m').value,d=$('#f_d').value||tdy(),v=mkV('refund:'+crypto.randomUUID(),'Refund',no,d,'Refund to '+cu.name+': '+n,[['receivables',amt,0],[mt==='Cash'?'cash':'bank',0,amt]]);
+  await atomic([['vouchers',v],['payments',{id:crypto.randomUUID(),kind:'refund',number:no,date:d,amount:amt,method:mt,customerId:cu.id,note:n,createdAt:new Date().toISOString()}]]);await audit('REFUND',no+' '+money(amt));acctView(m,'vch')}}
+async function acctForm(e,a,m){
+ e.innerHTML=`<div class="card"><h2>New account</h2>${field('n_n','Account name','')}<label>Type</label><select id="n_g"><option value="expense">Expense</option><option value="income">Income</option><option value="asset">Asset</option><option value="liability">Liability</option><option value="equity">Equity</option></select><div id="msg"></div><button class="btn" id="sv">Add account</button></div>`;
+ $('#sv').onclick=async()=>{const n=$('#n_n').value.trim();if(!n)return $('#msg').innerHTML='<div class="alert bad">Enter a name.</div>';
+  if((await getAll('accounts')).some(x=>x.name.toLowerCase()===n.toLowerCase()))return $('#msg').innerHTML='<div class="alert bad">An account with this name exists.</div>';
+  await putOne('accounts',{id:'x_'+crypto.randomUUID().slice(0,8),name:n,group:$('#n_g').value,active:true});await audit('ACCOUNT_CREATED',n);acctView(m,'tb')}}
+const SS={new:'New',pending:'Pending',inprogress:'In progress',completed:'Completed',cancelled:'Cancelled'};
+const pimg=f=>new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>{const i=new Image();i.onload=()=>{const k=Math.min(1,1000/Math.max(i.width,i.height)),c=document.createElement('canvas');c.width=Math.round(i.width*k);c.height=Math.round(i.height*k);c.getContext('2d').drawImage(i,0,0,c.width,c.height);res(c.toDataURL('image/jpeg',.7))};i.onerror=()=>rej(new Error('Please choose an image file.'));i.src=r.result};r.onerror=()=>rej(r.error);r.readAsDataURL(f)});
+async function svcSummary(){const a=await getAll('services');return [['Pending service requests',a.filter(s=>['new','pending','inprogress'].includes(s.status)).length]]}
+async function expensesView(m,id){
+ if(id==='')return expForm(m);
+ if(id)return expDoc(m,id);
+ const [es,ac]=await Promise.all([getAll('expenses'),getAll('accounts')]),nm=Object.fromEntries(ac.map(a=>[a.id,a.name])),t=tdy(),mo=t.slice(0,7),live=es.filter(e=>e.status!=='cancelled'),by={};
+ const s=a=>money(r2(a.reduce((x,e)=>x+e.total,0)));live.filter(e=>e.date.startsWith(mo)).forEach(e=>by[e.categoryId]=(by[e.categoryId]||0)+e.total);
+ es.sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
+ m.innerHTML=`<button class="btn" id="add">+ New expense</button><div class="card" style="margin-top:12px"><h2>Summary</h2><p style="margin:0">Today <b>${s(live.filter(e=>e.date===t))}</b> · This month <b>${s(live.filter(e=>e.date.startsWith(mo)))}</b></p>${Object.entries(by).map(([k,v])=>`<p style="margin:4px 0;font-size:14px">${esc(nm[k])}: ${money(r2(v))}</p>`).join('')}</div><div id="lst"></div>`;
+ $('#lst').innerHTML=es.slice(0,60).map(e=>rowCard(e.id,money(e.total)+' · '+(nm[e.categoryId]||''),e.date+' · '+e.method+(e.notes?' · '+e.notes:'')+(e.status==='cancelled'?' · CANCELLED':''))).join('')||'<p style="color:var(--mut)">No expenses yet.</p>';
+ document.querySelectorAll('#lst .card').forEach(c=>c.onclick=()=>expensesView(m,c.dataset.id));$('#add').onclick=()=>expensesView(m,'')}
+async function expForm(m){
+ await ensureChart();const cats=(await getAll('accounts')).filter(a=>a.group==='expense'&&a.active!==false&&a.id!=='cogs'&&a.id!=='dep_exp');
+ m.innerHTML=`<div class="card"><h2>New expense</h2>${field('x_d','Date',tdy(),'date')}<label>Category (add more under Accounts)</label><select id="x_c">${cats.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select>${field('x_a','Amount (excl. GST)','','number','step="0.01" inputmode="decimal"')}${field('x_g','GST % (0 if none)','0','number','step="0.01" inputmode="decimal"')}<label>Paid by</label><select id="x_m">${PAYM.map(x=>`<option>${x}</option>`).join('')}</select>${field('x_n','Notes','')}<label>Bill photo (optional)</label><input type="file" id="x_f" accept="image/*"><div id="tt"></div><div id="msg"></div><button class="btn" id="sv">Save expense</button><button class="btn alt" id="bk">Back</button></div>`;
+ const tot=()=>{const a=+$('#x_a').value||0,g=+$('#x_g').value||0;$('#tt').innerHTML='<p style="font-size:14px">Total <b>'+money(r2(a+a*g/100))+'</b></p>'};$('#x_a').oninput=$('#x_g').oninput=tot;
+ $('#bk').onclick=()=>expensesView(m);
+ $('#sv').onclick=async()=>{const bad=t=>$('#msg').innerHTML='<div class="alert bad">'+t+'</div>',a=r2(+$('#x_a').value),g=+$('#x_g').value||0;
+  if(!(a>0))return bad('Enter an amount above 0.');if(!(g>=0&&g<=28))return bad('GST must be between 0 and 28.');
+  let att=null;const f=$('#x_f').files[0];if(f){try{att=await pimg(f)}catch(e){return bad(e.message)}}
+  const tax=r2(a*g/100),total=r2(a+tax),d=$('#x_d').value||tdy(),mt=$('#x_m').value,id=crypto.randomUUID(),no=await nextNo('payment_voucher');
+  const v=mkV('exp:'+id,'Expense',no,d,'Expense: '+($('#x_n').value.trim()||$('#x_c').selectedOptions[0].text),[[$('#x_c').value,a,0],['gst_in',tax,0],[mt==='Cash'?'cash':'bank',0,total]]);
+  await atomic([['expenses',{id,date:d,categoryId:$('#x_c').value,amount:a,gst:g,tax,total,method:mt,notes:$('#x_n').value.trim(),attachment:att,voucher:no,status:'posted',createdAt:new Date().toISOString()}],['vouchers',v]]);await audit('EXPENSE_CREATED',no+' '+money(total));expensesView(m)}}
+async function expDoc(m,id){
+ const [e,ac]=await Promise.all([getOne('expenses',id),getAll('accounts')]),nm=Object.fromEntries(ac.map(a=>[a.id,a.name]));
+ m.innerHTML=`<div class="card"><h2>Expense ${esc(e.voucher)} ${e.status==='cancelled'?'(CANCELLED)':''}</h2><p style="font-size:14px">${e.date} · ${esc(nm[e.categoryId])}<br>Amount ${money(e.amount)} · GST ${e.gst}% (${money(e.tax)})<br><b>Total ${money(e.total)}</b> · ${esc(e.method)}<br>${esc(e.notes)}</p>${e.attachment?'<img src="'+e.attachment+'" style="max-width:100%;border-radius:8px">':''}<div id="msg"></div>${e.status!=='cancelled'?'<button class="btn alt" id="cx" style="color:var(--bad);border-color:var(--bad)">Cancel expense</button>':''}<button class="btn alt" id="bk">Back</button></div>`;
+ $('#bk').onclick=()=>expensesView(m);
+ if($('#cx'))$('#cx').onclick=async()=>{if(!confirm('Cancel this expense? A reversing entry is posted and the record stays.'))return;
+  const o=(await getAll('vouchers')).find(v=>v.refKey==='exp:'+id);e.status='cancelled';const ops=[['expenses',e]];
+  if(o)ops.push(['vouchers',mkV('rev:exp:'+id,'Expense (cancelled)',e.voucher,tdy(),'Cancelled expense '+e.voucher,o.lines.map(l=>[l.a,l.cr,l.dr]))]);
+  await atomic(ops);await audit('EXPENSE_CANCELLED',e.voucher);expDoc(m,id)}}
+async function servicesView(m,id){
+ if(id==='')return svcForm(m);
+ if(id)return svcDoc(m,id);
+ const [ss,cs]=await Promise.all([getAll('services'),getAll('customers')]),cn=Object.fromEntries(cs.map(c=>[c.id,c.name])),rk=s=>['new','pending','inprogress'].includes(s.status)?0:1;
+ ss.sort((a,b)=>rk(a)-rk(b)||b.createdAt.localeCompare(a.createdAt));
+ m.innerHTML='<button class="btn" id="add">+ New service request</button><div id="lst"></div>';
+ $('#lst').innerHTML=ss.map(s=>rowCard(s.id,s.number+' · '+(cn[s.customerId]||''),s.date+' · '+SS[s.status]+(s.company&&!s.company.returned?' · AT COMPANY':'')+' · '+s.complaint.slice(0,40))).join('')||'<p style="color:var(--mut)">No service requests yet.</p>';
+ document.querySelectorAll('#lst .card').forEach(c=>c.onclick=()=>servicesView(m,c.dataset.id));$('#add').onclick=()=>servicesView(m,'')}
+async function svcForm(m){
+ const [cs,ms,us,inv]=await Promise.all([getAll('customers'),getAll('machines'),getAll('units'),getAll('invoices')]),C=cs.filter(c=>c.active!==false),M=ms.filter(x=>x.active!==false&&x.status!=='retired');
+ if(!C.length){m.innerHTML='<div class="alert">Add a customer first.</div>';return}
+ m.innerHTML=`<div class="card"><h2>New service request</h2><label>Customer</label><select id="s_c">${C.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select><label>Machine</label><select id="s_m"><option value="">Customer machine (enter serial below)</option>${M.map(x=>`<option value="${x.id}">${esc(x.serial)} (rental fleet)</option>`).join('')}</select>${field('s_s','Serial number of customer machine','','text','list="sl"')}<datalist id="sl">${us.filter(u=>u.status==='sold').map(u=>`<option value="${esc(u.serial)}">`).join('')}</datalist><div id="s_h"></div>${field('s_o','Model / description','')}<label>Under warranty?</label><select id="s_w"><option value="unknown">Not sure</option><option value="yes">Yes</option><option value="no">No</option></select>${field('s_a','Accessories received with machine (mask, tube, charger...)','')}${field('s_q','Condition on receipt','')}${field('s_k','Complaint *','')}${field('s_d','Service date',tdy(),'date')}${field('s_t','Technician','')}<div id="msg"></div><button class="btn" id="sv">Create request</button><button class="btn alt" id="bk">Back</button></div>`;
+ $('#bk').onclick=()=>servicesView(m);
+ $('#s_s').oninput=()=>{const u=us.find(x=>x.status==='sold'&&x.serial.toLowerCase()===$('#s_s').value.trim().toLowerCase());if(u){const i=inv.find(x=>x.id===u.saleId);$('#s_c').value=u.customerId;$('#s_h').innerHTML='<div class="alert ok">Sold by us on '+esc(u.soldAt||'')+(i?' (invoice '+esc(i.number)+')':'')+'. Customer selected. Check warranty period.</div>'}else $('#s_h').innerHTML=''};
+ $('#sv').onclick=async()=>{const bad=t=>$('#msg').innerHTML='<div class="alert bad">'+t+'</div>',mid=$('#s_m').value,st=$('#s_s').value.trim(),k=$('#s_k').value.trim();
+  if(!k)return bad('Describe the complaint.');if(!mid&&!st)return bad('Enter a serial number or model.');
+  const id=crypto.randomUUID(),number=await nextNo('service_order');
+  await putOne('services',{id,number,customerId:$('#s_c').value,machineId:mid,serialText:st,model:$('#s_o').value.trim(),warranty:$('#s_w').value,accessories:$('#s_a').value.trim(),conditionIn:$('#s_q').value.trim(),complaint:k,date:$('#s_d').value||tdy(),technician:$('#s_t').value.trim(),status:'new',parts:[],paid:0,payments:[],createdAt:new Date().toISOString()});await audit('SERVICE_CREATED',number);servicesView(m,id)}}
+async function svcDoc(m,id){
+ const [s,co,cs,ms,ps,rs]=await Promise.all([getOne('services',id),getOne('settings','company'),getAll('customers'),getAll('machines'),getAll('products'),getAll('rentals')]);
+ const cu=cs.find(c=>c.id===s.customerId)||{},mc=ms.find(x=>x.id===s.machineId),open=!['completed','cancelled'].includes(s.status),ch=s.charge||{total:0},bal=r2((ch.total||0)-(s.paid||0));
+ m.innerHTML=`<div class="card"><div style="text-align:center"><b style="font-size:18px">${esc(co.name)}</b><br>${esc(co.address)}<br>${co.gstin?'GSTIN: '+esc(co.gstin):''} ${esc(co.phone)}</div><h2 style="text-align:center;margin-top:12px">SERVICE ORDER</h2><p style="font-size:14px"><b>${esc(s.number)}</b> · ${s.date} · <b>${SS[s.status]}</b><br>Customer: <b>${esc(cu.name)}</b> · ${esc(cu.mobile)}<br>Machine: <b>${esc(mc?mc.serial:s.serialText)}</b><br>Technician: ${esc(s.technician)||'-'}<br>Complaint: ${esc(s.complaint)}<br>Warranty: ${esc(s.warranty||'unknown')}${s.accessories?'<br>Accessories: '+esc(s.accessories):''}${s.company?'<br>Company: '+esc(s.company.name)+', sent '+s.company.sentDate+' (note '+esc(s.company.dn)+')'+(s.company.returned?', back '+s.company.returned+' ('+esc(s.company.outcome||'')+')':' - <b>at company</b>'):''}</p>${s.parts.length?'<p style="font-size:14px">Spare parts: '+s.parts.map(p=>esc(p.name)+' x'+p.qty).join(', ')+'</p>':''}${s.status==='completed'?`<p style="text-align:right">Service charge ${money(ch.taxable)}<br>GST ${money(ch.tax)}<br><b>Total ${money(ch.total)}</b><br>Paid ${money(s.paid)} · <b>Balance ${money(bal)}</b></p>${s.payments.length?'<p style="font-size:13px">Receipts: '+s.payments.map(p=>p.date+' '+money(p.amount)+' ('+esc(p.receipt)+')').join('; ')+'</p>':''}`:''}<div class="noprint"><div id="act"></div><div id="msg"></div><button class="btn" id="pr">Print / Save as PDF</button><button class="btn alt" id="rn">Machine receipt note</button>${open&&!(s.company&&!s.company.returned)?'<button class="btn alt" id="wd">Send to company (warranty)</button>':''}${s.company?'<button class="btn alt" id="wp">Delivery note to company</button>':''}${s.company&&!s.company.returned?'<button class="btn alt" id="wr">Mark received back from company</button>':''}<button class="btn alt" id="dc">Delivery note to customer</button>${open?'<button class="btn alt" id="pe">Mark pending</button><button class="btn alt" id="ip">Start work</button><button class="btn alt" id="ap">Add spare part</button><button class="btn alt" id="cm">Complete service</button><button class="btn alt" id="cx" style="color:var(--bad);border-color:var(--bad)">Cancel request</button>':''}${s.status==='completed'&&bal>0?'<button class="btn alt" id="py">Record payment</button>':''}<button class="btn alt" id="bk">Back</button></div></div>`;
+ const msg=t=>$('#msg').innerHTML='<div class="alert bad">'+t+'</div>',go=async(ops,a)=>{await atomic(ops);await audit(a,s.number);svcDoc(m,id)},fl=()=>{if(mc&&s.maintSet&&mc.status==='maintenance'){mc.status=freeSt(mc.id,null,rs);s.maintSet=false;return [['machines',mc]]}return []};
+ $('#bk').onclick=()=>servicesView(m);
+ $('#pr').onclick=()=>{try{window.print()}catch(e){msg('Printing is blocked here. Take a screenshot instead.')}};
+ $('#rn').onclick=()=>rnDoc(m,id);$('#dc').onclick=()=>dnDoc(m,'service',id);
+ if($('#wp'))$('#wp').onclick=()=>wdnDoc(m,id);
+ if($('#wd'))$('#wd').onclick=async()=>{const ss=await getAll('suppliers');$('#act').innerHTML=field('w_n','Company / supplier','','text','list="wl"')+'<datalist id="wl">'+ss.filter(x=>x.active!==false).map(x=>'<option value="'+esc(x.name)+'">').join('')+'</datalist>'+field('w_r','Company reference / RMA no. (optional)','')+field('w_d','Date sent',tdy(),'date')+field('w_x','Notes','')+'<button class="btn" id="w_s">Create delivery note</button>';
+  $('#w_s').onclick=async()=>{const n=$('#w_n').value.trim();if(!n)return msg('Enter the company name.');const sp=ss.find(x=>x.name.toLowerCase()===n.toLowerCase());s.company={name:n,supplierId:sp?sp.id:null,ref:$('#w_r').value.trim(),sentDate:$('#w_d').value||tdy(),notes:$('#w_x').value.trim(),dn:await nextNo('warranty_dn'),returned:null};if(s.status==='new'||s.status==='pending')s.status='inprogress';await atomic([['services',s]]);await audit('SERVICE_SENT_TO_COMPANY',s.number+' '+n);wdnDoc(m,id)}};
+ if($('#wr'))$('#wr').onclick=()=>{$('#act').innerHTML=field('b_d','Date received back',tdy(),'date')+'<label>Outcome</label><select id="b_o"><option>Repaired</option><option>Replaced with new unit</option><option>Not covered by warranty</option><option>Returned unrepaired</option></select>'+field('b_n','Replacement serial number (if replaced)','')+'<button class="btn" id="b_s">Save</button>';
+  $('#b_s').onclick=async()=>{const ns=$('#b_n').value.trim();if(ns){const [us,ms2]=await Promise.all([getAll('units'),getAll('machines')]);if(us.some(u=>u.status!=='void'&&u.serial.toLowerCase()===ns.toLowerCase())||ms2.some(x=>x.active!==false&&x.serial.toLowerCase()===ns.toLowerCase()))return msg('That serial number already exists.')}
+   s.company.returned=$('#b_d').value||tdy();s.company.outcome=$('#b_o').value;if(ns){s.company.oldSerial=s.serialText;s.company.newSerial=ns;if(!mc)s.serialText=ns}go([['services',s]],'SERVICE_BACK_FROM_COMPANY')}};
+ if(!open&&!$('#py'))return;
+ if($('#pe'))$('#pe').onclick=()=>{s.status='pending';go([['services',s]],'SERVICE_PENDING')};
+ if($('#ip'))$('#ip').onclick=()=>{s.status='inprogress';const ops=[['services',s]];if(mc&&(mc.status==='available'||mc.status==='reserved')){mc.status='maintenance';s.maintSet=true;ops.push(['machines',mc])}go(ops,'SERVICE_STARTED')};
+ if($('#cx'))$('#cx').onclick=()=>{if(!confirm('Cancel '+s.number+'?'))return;s.status='cancelled';go([['services',s],...fl()],'SERVICE_CANCELLED')};
+ if($('#ap'))$('#ap').onclick=()=>{const P=ps.filter(p=>p.active!==false&&p.kind==='sale');if(!P.length)return msg('No saleable products to use as parts.');
+  $('#act').innerHTML=`<label>Part</label><select id="a_p">${P.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select>${field('a_q','Quantity',1,'number','min="1" inputmode="numeric"')}<button class="btn" id="a_s">Add part</button><p style="font-size:12px;color:var(--mut)">Stock is deducted when the service is completed.</p>`;
+  $('#a_s').onclick=()=>{const q=parseInt($('#a_q').value,10);if(!(q>0))return msg('Enter a quantity.');const p=P.find(x=>x.id===$('#a_p').value);s.parts.push({productId:p.id,name:p.name,qty:q});go([['services',s]],'SERVICE_PART_ADDED')}};
+ if($('#cm'))$('#cm').onclick=()=>{$('#act').innerHTML=field('c_a','Service charge (excl. GST, 0 if free)',0,'number','step="0.01" inputmode="decimal"')+field('c_g','GST %',0,'number','step="0.01" inputmode="decimal"')+field('c_r','Received now',0,'number','step="0.01" inputmode="decimal"')+`<label>Method</label><select id="c_m">${PAYM.map(x=>`<option>${x}</option>`).join('')}</select><button class="btn" id="c_s">Complete and post</button>`;
+  $('#c_s').onclick=async()=>{const tx=r2(+$('#c_a').value||0),g=+$('#c_g').value||0,tax=r2(tx*g/100),tot=r2(tx+tax),pd=r2(+$('#c_r').value||0);
+   if(tx<0||!(g>=0&&g<=28)||pd<0||pd>tot)return msg('Check the charge, GST and amount received (it cannot exceed the total).');
+   const lv=await stockLevels(),need={};s.parts.forEach(p=>need[p.productId]=(need[p.productId]||0)+p.qty);
+   for(const k in need){const x=lv.find(z=>z.p.id===k);if(!x||x.q<need[k])return msg('Not enough stock for '+esc((x||{p:{name:'a part'}}).p.name)+'.')}
+   const at=new Date().toISOString(),d=tdy(),ops=[],cost=r2(s.parts.reduce((a,p)=>a+p.qty*((ps.find(x=>x.id===p.productId)||{}).purchasePrice||0),0));
+   s.parts.forEach(p=>ops.push(['stock',{id:crypto.randomUUID(),productId:p.productId,date:d,at,qty:-p.qty,type:'service',ref:s.number,note:''}]));
+   if(tot>0)ops.push(['vouchers',mkV('svc:'+id,'Service',s.number,d,'Service order '+s.number,[['receivables',tot,0],['service_income',0,tx],['gst_out',0,tax]])]);
+   if(cost>0)ops.push(['vouchers',mkV('svcparts:'+id,'Spare parts',s.number,d,'Parts used '+s.number,[['exp_repairs',cost,0],['inventory',0,cost]])]);
+   if(pd>0){const pid=crypto.randomUUID(),rc=await nextNo('payment_receipt'),mt=$('#c_m').value;s.payments.push({id:pid,date:d,amount:pd,method:mt,receipt:rc});ops.push(['vouchers',mkV('svcpay:'+pid,'Receipt',rc,d,'Payment for '+s.number,[[mt==='Cash'?'cash':'bank',pd,0],['receivables',0,pd]])])}
+   s.status='completed';s.completedAt=at;s.charge={taxable:tx,gst:g,tax,total:tot};s.paid=pd;ops.push(['services',s],...fl());await go(ops,'SERVICE_COMPLETED')}};
+ if($('#py'))$('#py').onclick=()=>{$('#act').innerHTML=field('y_a','Amount',bal,'number','step="0.01" inputmode="decimal"')+`<label>Method</label><select id="y_m">${PAYM.map(x=>`<option>${x}</option>`).join('')}</select><button class="btn" id="y_s">Save payment</button>`;
+  $('#y_s').onclick=async()=>{const a=r2(+$('#y_a').value);if(!(a>0&&a<=bal))return msg('Amount must be above 0 and not more than the balance.');
+   const pid=crypto.randomUUID(),rc=await nextNo('payment_receipt'),mt=$('#y_m').value;s.payments.push({id:pid,date:tdy(),amount:a,method:mt,receipt:rc});s.paid=r2(s.paid+a);
+   go([['services',s],['vouchers',mkV('svcpay:'+pid,'Receipt',rc,tdy(),'Payment for '+s.number,[[mt==='Cash'?'cash':'bank',a,0],['receivables',0,a]])]],'SERVICE_PAYMENT')}}}
+async function dashExtras(){
+ const [inv,rs,ex,sv]=await Promise.all(['invoices','rentals','expenses','services'].map(getAll)),lv=await stockLevels(),t=tdy(),mons=[];
+ for(let i=5;i>=0;i--){const d=new Date();d.setDate(1);d.setMonth(d.getMonth()-i);mons.push(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'))}
+ const S=mons.map(mo=>r2(inv.filter(i=>i.type==='sale'&&i.status!=='cancelled'&&i.date.startsWith(mo)).reduce((s,i)=>s+i.taxable,0)-inv.filter(i=>i.type==='credit'&&i.date.startsWith(mo)).reduce((s,i)=>s+i.taxable,0)));
+ const R=mons.map(mo=>r2(rs.filter(r=>r.status!=='cancelled').flatMap(r=>r.charges).filter(c=>c.date.startsWith(mo)).reduce((s,c)=>s+c.taxable,0)));
+ const E=mons.map(mo=>r2(ex.filter(e=>e.status!=='cancelled'&&e.date.startsWith(mo)).reduce((s,e)=>s+e.amount,0)));
+ const mx=Math.max(1,...S,...R,...E),W=330,H=150,gw=W/6;
+ const bars=mons.map((mo,i)=>[[S[i],'#143d85'],[R[i],'#1a8a8a'],[E[i],'#c77700']].map(([v,c],j)=>{const h=Math.round(v/mx*(H-30));return `<rect x="${i*gw+8+j*16}" y="${H-20-h}" width="14" height="${h}" fill="${c}" rx="2"/>`}).join('')+`<text x="${i*gw+gw/2}" y="${H-5}" font-size="10" text-anchor="middle" fill="#64708a">${mo.slice(5)}/${mo.slice(2,4)}</text>`).join('');
+ const al=[],low=lv.filter(x=>x.p.minStock>0&&x.q<=x.p.minStock),od=rs.filter(r=>r.status==='active'&&r.expectedReturn<t),dp=rs.filter(r=>r.status!=='cancelled'&&rBal(r)>0&&(r.status==='returned'||r.expectedReturn<t)),ps=sv.filter(s=>['new','pending','inprogress'].includes(s.status));
+ if(low.length)al.push(low.length+' item(s) at or below minimum stock');if(od.length)al.push(od.length+' rental return(s) overdue');if(dp.length)al.push(dp.length+' rental(s) with payment overdue');if(ps.length)al.push(ps.length+' open service request(s)');const ac2=sv.filter(s=>s.company&&!s.company.returned).length;if(ac2)al.push(ac2+' machine(s) at the company for warranty');
+ return al.map(a=>'<div class="alert">⚠ '+a+'</div>').join('')+`<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto">${bars}</svg><p style="font-size:12px;margin:0 0 6px"><span style="color:#143d85">■ Sales</span> <span style="color:#1a8a8a">■ Rental</span> <span style="color:#c77700">■ Expenses</span> (excl. GST)</p>`}
+const REPS=[['dsales','Daily sales'],['msales','Monthly sales'],['rinc','Rental income'],['rout','Rental outstanding'],['rhist','Equipment rental history'],['avail','Available machines'],['stock','Stock report'],['sval','Stock valuation'],['purch','Purchase report'],['cout','Customer outstanding'],['sout','Supplier outstanding'],['expr','Expense report'],['pl','Profit and loss'],['bs','Balance sheet'],['cf','Cash flow'],['gst','GST summary'],['pcol','Payment collection'],['mmaint','Machine maintenance']];
+let RS={k:'dsales',f:null,t:null};
+async function reportsView(m){
+ const t=tdy();if(!RS.f){RS.f=t.slice(0,8)+'01';RS.t=t}
+ m.innerHTML=`<div class="card noprint"><h2>Reports</h2><label>Report</label><select id="q_k">${REPS.map(([k,l])=>`<option value="${k}" ${k===RS.k?'selected':''}>${l}</option>`).join('')}</select><div class="grid"><div>${field('q_f','From',RS.f,'date')}</div><div>${field('q_t','To',RS.t,'date')}</div></div><button class="btn" id="go">Show report</button></div><div id="out"></div>`;
+ $('#go').onclick=async()=>{RS={k:$('#q_k').value,f:$('#q_f').value,t:$('#q_t').value};
+  if(!RS.f||!RS.t||RS.f>RS.t)return $('#out').innerHTML='<div class="alert bad">Check the dates.</div>';
+  const R=await buildReport(RS),co=await getOne('settings','company'),fm=(v,i)=>R.m&&R.m.includes(i)&&typeof v==='number'?money(v):esc(v);
+  $('#out').innerHTML=`<div class="card"><div style="text-align:center"><b>${esc(co.name)}</b><br><b>${esc(R.title)}</b><br><small>${RS.f} to ${RS.t}</small></div><div class="scroll"><table><tr>${R.cols.map(c=>`<th>${esc(c)}</th>`).join('')}</tr>${R.rows.map(r=>`<tr>${r.map((v,i)=>`<td>${fm(v,i)}</td>`).join('')}</tr>`).join('')||'<tr><td colspan="9">No data for this period</td></tr>'}${R.foot?`<tr>${R.foot.map((v,i)=>`<td><b>${fm(v,i)}</b></td>`).join('')}</tr>`:''}</table></div>${R.note?`<p style="font-size:12px;color:var(--mut)">${esc(R.note)}</p>`:''}<div class="noprint"><button class="btn" id="pr">Print / Save as PDF</button><button class="btn alt" id="cs">Download CSV</button></div></div>`;
+  $('#pr').onclick=()=>{try{window.print()}catch(e){}};
+  $('#cs').onclick=()=>{const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"',txt='\ufeff'+[R.cols,...R.rows,...(R.foot?[R.foot]:[])].map(r=>r.map(q).join(',')).join('\n'),a=document.createElement('a');a.href=URL.createObjectURL(new Blob([txt],{type:'text/csv'}));a.download='bioniks-'+RS.k+'-'+RS.f+'-'+RS.t+'.csv';document.body.appendChild(a);a.click();a.remove()}};
+ if(RS.k)$('#go').click()}
+async function buildReport({k,f,t}){
+ await syncLedger();
+ const nm=['invoices','purchases','rentals','machines','products','customers','suppliers','services','expenses','vouchers','accounts'],A=await Promise.all(nm.map(getAll)),D=Object.fromEntries(nm.map((n,i)=>[n,A[i]]));
+ const inR=d=>!!d&&d>=f&&d<=t,sm=(a,fn)=>r2(a.reduce((s,x)=>s+fn(x),0)),tf=(rows,cs)=>{const r=Array(rows.length?rows[0].length:Math.max(...cs)+1).fill('');r[0]='Total';cs.forEach(c=>r[c]=sm(rows,x=>+x[c]||0));return r};
+ const cn=Object.fromEntries(D.customers.map(c=>[c.id,c])),sn=Object.fromEntries(D.suppliers.map(s=>[s.id,s])),mn=Object.fromEntries(D.machines.map(x=>[x.id,x])),pr=Object.fromEntries(D.products.map(p=>[p.id,p]));
+ const live=D.invoices.filter(i=>i.status!=='cancelled'),lr=D.rentals.filter(r=>r.status!=='cancelled'),vin=D.vouchers.filter(v=>inR(v.date)),nmC=id=>(cn[id]||{}).name||'';
+ if(k==='dsales'||k==='msales'){const o={};live.filter(i=>inR(i.date)).forEach(i=>{const key=k==='dsales'?i.date:i.date.slice(0,7),x=o[key]||(o[key]={n:0,tx:0,tax:0,tot:0,ret:0});if(i.type==='credit')x.ret+=i.total;else{x.n++;x.tx+=i.taxable;x.tax+=i.total-i.taxable;x.tot+=i.total}});
+  const rows=Object.keys(o).sort().map(d=>[d,o[d].n,r2(o[d].tx),r2(o[d].tax),r2(o[d].tot),r2(o[d].ret),r2(o[d].tot-o[d].ret)]);
+  return {title:k==='dsales'?'Daily sales report':'Monthly sales report',cols:[k==='dsales'?'Date':'Month','Invoices','Taxable','GST','Total','Returns (credit notes)','Net sales'],rows,foot:tf(rows,[1,2,3,4,5,6]),m:[2,3,4,5,6],note:'Excludes cancelled invoices.'}}
+ if(k==='rinc'){const rows=lr.flatMap(r=>r.charges.map(c=>[c.date,c.inv,nmC(r.customerId),c.desc,c.taxable,c.tax,c.total])).filter(x=>inR(x[0])).sort((a,b)=>a[0].localeCompare(b[0]));
+  return {title:'Rental income report',cols:['Date','Invoice','Customer','Description','Taxable','GST','Total'],rows,foot:tf(rows,[4,5,6]),m:[4,5,6],note:'Income is counted on the date each charge is billed.'}}
+ if(k==='rout'){const rows=lr.filter(r=>rBal(r)>0).map(r=>[r.number,nmC(r.customerId),(mn[r.machineId]||{}).serial||'',r.status,rTot(r).total,r2(rPaid(r)+(r.depositApplied||0)),rBal(r)]);
+  return {title:'Rental outstanding report',cols:['Rental','Customer','Machine','Status','Billed','Paid','Balance'],rows,foot:tf(rows,[4,5,6]),m:[4,5,6],note:'Shows the position today.'}}
+ if(k==='rhist'){const rows=D.rentals.filter(r=>inR(r.start)).sort((a,b)=>a.start.localeCompare(b.start)).map(r=>[r.number,(mn[r.machineId]||{}).serial||'',nmC(r.customerId),r.start,r.expectedReturn,r.actualReturn||'',r.status,rTot(r).total]);
+  return {title:'Equipment rental history',cols:['Rental','Machine','Customer','Start','Expected return','Returned','Status','Billed'],rows,m:[7],note:'Rentals starting in the selected period.'}}
+ if(k==='avail'){const rows=D.machines.filter(x=>x.active!==false&&x.status==='available').map(x=>[x.serial,(pr[x.productId]||{}).name||'',x.notes||'']);return {title:'Available machines',cols:['Serial','Model','Notes'],rows,note:'Shows the position today.'}}
+ if(k==='stock'||k==='sval'){const lv=await stockLevels();
+  if(k==='stock'){const rows=lv.map(x=>[x.p.code,x.p.name,x.p.category,x.q,x.p.minStock||0,x.p.minStock>0&&x.q<=x.p.minStock?'LOW':'OK']);return {title:'Stock report',cols:['Code','Product','Category','Quantity','Minimum','Status'],rows,note:'Saleable items, current position.'}}
+  const rows=lv.map(x=>[x.p.name,x.q,x.p.purchasePrice||0,x.val]);return {title:'Stock valuation report',cols:['Product','Quantity','Purchase price','Value'],rows,foot:tf(rows,[3]),m:[2,3],note:'Valued at purchase price.'}}
+ if(k==='purch'){const rows=D.purchases.filter(p=>p.status!=='cancelled'&&inR(p.date)).map(p=>[p.date,p.number,(sn[p.supplierId]||{}).name||'',p.supplierInvoiceNo,p.taxable,r2(p.total-p.taxable),p.total,p.paid,r2(p.total-p.paid)]);
+  return {title:'Purchase report',cols:['Date','Number','Supplier','Supplier invoice','Taxable','GST','Total','Paid','Balance'],rows,foot:tf(rows,[4,5,6,7,8]),m:[4,5,6,7,8],note:'Excludes cancelled purchases.'}}
+ if(k==='cout'){const rows=D.customers.map(c=>{const s=sm(live.filter(i=>i.customerId===c.id&&i.type==='sale'),i=>i.total-i.paid-(i.credited||0)),r=sm(lr.filter(x=>x.customerId===c.id),x=>rBal(x)),v=sm(D.services.filter(x=>x.customerId===c.id&&x.status==='completed'),x=>x.charge.total-x.paid);return [c.name,c.mobile,s,r,v,r2(s+r+v)]}).filter(x=>x[5]>0);
+  return {title:'Customer outstanding report',cols:['Customer','Mobile','Sales due','Rental due','Service due','Total due'],rows,foot:tf(rows,[2,3,4,5]),m:[2,3,4,5],note:'Shows the position today. Refunds are not netted.'}}
+ if(k==='sout'){const rows=D.suppliers.map(s=>{const p=D.purchases.filter(x=>x.supplierId===s.id&&x.status==='received'),tt=sm(p,x=>x.total),pd=sm(p,x=>x.paid);return [s.name,s.phone||'',p.length,tt,pd,r2(tt-pd)]}).filter(x=>x[5]>0);
+  return {title:'Supplier outstanding report',cols:['Supplier','Phone','Invoices','Billed','Paid','Balance'],rows,foot:tf(rows,[2,3,4,5]),m:[3,4,5],note:'Shows the position today.'}}
+ if(k==='expr'){const ac=Object.fromEntries(D.accounts.map(a=>[a.id,a.name])),rows=D.expenses.filter(e=>e.status!=='cancelled'&&inR(e.date)).sort((a,b)=>a.date.localeCompare(b.date)).map(e=>[e.date,e.voucher,ac[e.categoryId]||'',e.notes||'',e.method,e.amount,e.tax,e.total]);
+  return {title:'Expense report',cols:['Date','Voucher','Category','Notes','Method','Amount','GST','Total'],rows,foot:tf(rows,[5,6,7]),m:[5,6,7],note:'Excludes cancelled expenses.'}}
+ if(k==='pl'){const b=bals(vin),inc=D.accounts.filter(a=>a.group==='income'&&b[a.id]),ex=D.accounts.filter(a=>a.group==='expense'&&b[a.id]),ti=sm(inc,a=>-b[a.id]),te=sm(ex,a=>b[a.id]);
+  return {title:'Profit and loss statement',cols:['Particulars','Amount'],rows:[['INCOME',''],...inc.map(a=>[a.name,r2(-b[a.id])]),['Total income',ti],['EXPENSES',''],...ex.map(a=>[a.name,r2(b[a.id])]),['Total expenses',te],['NET PROFIT / (LOSS)',r2(ti-te)]],m:[1],note:'From ledger entries. Income is shown excluding GST.'}}
+ if(k==='bs'){const b=bals(D.vouchers.filter(v=>v.date<=t)),g=n=>D.accounts.filter(a=>a.group===n&&b[a.id]),pf=r2(-sm(D.accounts.filter(a=>a.group==='income'||a.group==='expense'),a=>b[a.id]||0)),A1=g('asset'),L1=g('liability'),E1=g('equity'),ta=sm(A1,a=>b[a.id]),tl=sm(L1,a=>-b[a.id]),te=r2(sm(E1,a=>-b[a.id])+pf);
+  return {title:'Balance sheet as at '+t,cols:['Particulars','Amount'],rows:[['ASSETS',''],...A1.map(a=>[a.name,b[a.id]]),['Total assets',ta],['LIABILITIES',''],...L1.map(a=>[a.name,r2(-b[a.id])]),['Total liabilities',tl],['EQUITY',''],...E1.map(a=>[a.name,r2(-b[a.id])]),['Profit / (loss) to date',pf],['Total equity',te],['Liabilities + equity',r2(tl+te)]],m:[1],note:ta===r2(tl+te)?'Balance sheet agrees.':'Does not agree. Check the trial balance under Accounts.'}}
+ if(k==='cf'){const cb=v=>v.lines.filter(l=>l.a==='cash'||l.a==='bank'),op=r2(D.vouchers.filter(v=>v.date<f).reduce((s,v)=>s+cb(v).reduce((x,l)=>x+l.dr-l.cr,0),0)),o={};
+  vin.forEach(v=>{const l=cb(v);if(!l.length)return;const x=o[v.type]||(o[v.type]={i:0,o:0});l.forEach(y=>{x.i+=y.dr;x.o+=y.cr})});
+  const rows=Object.keys(o).map(ty=>[ty,r2(o[ty].i),r2(o[ty].o)]),ci=sm(rows,x=>x[1]),co=sm(rows,x=>x[2]);
+  return {title:'Cash flow report (cash and bank)',cols:['Particulars','Inflow','Outflow'],rows:[['Opening balance',op,''],...rows,['Net movement',r2(ci-co),''],['Closing balance',r2(op+ci-co),'']],m:[1,2]}}
+ if(k==='gst'){const row=(n,tx,c,s,i,u)=>[n,r2(tx),r2(c),r2(s),r2(i),r2(u),r2(c+s+i+u)],sl=live.filter(i=>i.type==='sale'&&inR(i.date)),cr=live.filter(i=>i.type==='credit'&&inR(i.date)),ch=lr.flatMap(r=>r.charges.map(c=>({...c,r}))).filter(c=>inR(c.date)),sv=D.services.filter(s=>s.status==='completed'&&inR((s.completedAt||'').slice(0,10))),pu=D.purchases.filter(p=>p.status!=='cancelled'&&inR(p.date)),ex=D.expenses.filter(e=>e.status!=='cancelled'&&inR(e.date));
+  const o=[row('Sales invoices',sm(sl,i=>i.taxable),sm(sl,i=>i.cgst),sm(sl,i=>i.sgst),sm(sl,i=>i.igst),0),row('Less: credit notes',-sm(cr,i=>i.taxable),-sm(cr,i=>i.cgst),-sm(cr,i=>i.sgst),-sm(cr,i=>i.igst),0),row('Rental charges',sm(ch,c=>c.taxable),sm(ch,c=>c.r.interstate?0:c.tax/2),sm(ch,c=>c.r.interstate?0:c.tax/2),sm(ch,c=>c.r.interstate?c.tax:0),0),row('Service charges',sm(sv,s=>s.charge.taxable),0,0,0,sm(sv,s=>s.charge.tax))];
+  const inp=[row('Purchases',sm(pu,p=>p.taxable),sm(pu,p=>p.cgst),sm(pu,p=>p.sgst),sm(pu,p=>p.igst),0),row('Expenses',sm(ex,e=>e.amount),0,0,0,sm(ex,e=>e.tax))],ot=sm(o,x=>x[6]),it=sm(inp,x=>x[6]),e0=['','','','','',''];
+  return {title:'GST summary (working report)',cols:['Particulars','Taxable value','CGST','SGST','IGST','Tax (split not recorded)','Total tax'],rows:[['OUTPUT TAX',...e0],...o,['Total output tax','','','','','',ot],['INPUT TAX',...e0],...inp,['Total input tax','','','','','',it],['NET GST PAYABLE / (CREDIT)','','','','','',r2(ot-it)]],m:[1,2,3,4,5,6],note:'Working report for review by your accountant. It is not a GST return and does not check eligibility of input credit.'}}
+ if(k==='pcol'){const rows=[];D.invoices.filter(i=>i.type==='sale').forEach(i=>(i.payments||[]).forEach(p=>rows.push([p.date,p.receipt,'Sale',i.number,nmC(i.customerId),p.method,p.amount])));D.rentals.forEach(r=>r.payments.forEach(p=>rows.push([p.date,p.receipt,'Rental',r.number,nmC(r.customerId),p.method,p.amount])));D.services.forEach(s=>(s.payments||[]).forEach(p=>rows.push([p.date,p.receipt,'Service',s.number,nmC(s.customerId),p.method,p.amount])));
+  const R=rows.filter(x=>inR(x[0])).sort((a,b)=>a[0].localeCompare(b[0]));return {title:'Payment collection report',cols:['Date','Receipt','Source','Document','Customer','Method','Amount'],rows:R,foot:tf(R,[6]),m:[6],note:'Rental security deposits are not included.'}}
+ if(k==='mmaint'){const rows=D.services.filter(s=>s.machineId&&inR(s.date)).map(s=>[s.number,(mn[s.machineId]||{}).serial||'',s.date,SS[s.status],s.technician||'',s.complaint,s.charge?s.charge.total:0]),mm=D.machines.filter(x=>x.status==='maintenance').map(x=>x.serial).join(', ');
+  return {title:'Machine maintenance report',cols:['Service order','Machine','Date','Status','Technician','Complaint','Charge'],rows,foot:tf(rows,[6]),m:[6],note:'Currently under maintenance: '+(mm||'none')}}
+ return {title:'Report',cols:['Message'],rows:[['Unknown report']]}}
+const DEST=['Files / iCloud Drive','Google Drive','Other location'];
+const dl=(txt,name,type)=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([txt],{type}));a.download=name;document.body.appendChild(a);a.click();a.remove()};
+const EXPT=[['customers','Customers'],['suppliers','Suppliers'],['products','Products'],['machines','Machines'],['invoices','Sales invoices and credit notes'],['purchases','Purchases'],['rentals','Rentals'],['services','Service orders'],['expenses','Expenses'],['vouchers','Ledger vouchers'],['stock','Stock movements'],['units','Serial numbers (units)'],['accounts','Chart of accounts']];
+async function csvOf(n){const rows=await getAll(n),keys=[...new Set(rows.flatMap(r=>Object.keys(r)))].filter(k=>k!=='attachment'),q=v=>'"'+String(v==null?'':typeof v==='object'?JSON.stringify(v):v).replace(/"/g,'""')+'"';return '\ufeff'+[keys.map(q).join(','),...rows.map(r=>keys.map(k=>q(r[k])).join(','))].join('\n')}
+async function pruneKind(kind,keep){const old=(await getAll('backups')).filter(b=>b.kind===kind).sort((a,b)=>b.at.localeCompare(a.at)).slice(keep);for(const b of old)await req(store('backups','readwrite').delete(b.id))}
+async function autoSnapshot(){try{const h=(await getAll('backups')).filter(b=>b.kind==='auto').sort((a,b)=>b.at.localeCompare(a.at));if(h[0]&&Date.now()-new Date(h[0].at)<864e5)return;const txt=await buildBackup();await putOne('backups',{at:new Date().toISOString(),kind:'auto',file:'automatic snapshot',size:txt.length,verified:true,version:APP_VERSION,data:txt});await pruneKind('auto',3)}catch(e){}}
+function restoreAll(o){return new Promise((res,rej)=>{const names=STORES.filter(n=>n!=='backups'),t=db.transaction(names,'readwrite');names.forEach(n=>{const s=t.objectStore(n);s.clear();(o.data[n]||[]).forEach(r=>s.put(r))});t.oncomplete=res;t.onerror=t.onabort=()=>rej(t.error)})}
+async function integrity(){
+ const nm=['invoices','purchases','rentals','machines','products','customers','suppliers','services','vouchers'],A=await Promise.all(nm.map(getAll)),D=Object.fromEntries(nm.map((n,i)=>[n,A[i]])),E=[],ids=n=>new Set(D[n].map(x=>x.id)),C=ids('customers'),P=ids('products'),S=ids('suppliers'),M=ids('machines');
+ const dup=(a,f,l)=>{const s=new Set();a.forEach(x=>{const k=f(x);if(!k)return;if(s.has(k))E.push('Duplicate '+l+': '+k);s.add(k)})};
+ D.invoices.forEach(i=>{if(!C.has(i.customerId))E.push(i.number+': customer record missing');i.lines.forEach(l=>{if(!P.has(l.productId))E.push(i.number+': product record missing')});if(i.type==='sale'&&r2(i.paid)>r2(i.total))E.push(i.number+': paid is more than total')});
+ D.purchases.forEach(p=>{if(!S.has(p.supplierId))E.push(p.number+': supplier record missing');if(r2(p.paid)>r2(p.total))E.push(p.number+': paid is more than total')});
+ D.rentals.forEach(r=>{if(!C.has(r.customerId))E.push(r.number+': customer record missing');if(!M.has(r.machineId))E.push(r.number+': machine record missing')});
+ const open=D.rentals.filter(r=>r.status==='active'||r.status==='reserved');open.forEach((a,i)=>open.slice(i+1).forEach(b=>{if(a.machineId===b.machineId&&a.start<=b.expectedReturn&&a.expectedReturn>=b.start)E.push('Machine double-booked: '+a.number+' and '+b.number)}));
+ dup(D.invoices,i=>i.number,'invoice number');dup(D.purchases,p=>p.number,'purchase number');dup(D.rentals,r=>r.number,'rental number');dup(D.services,s=>s.number,'service number');dup(D.machines,x=>x.serial&&x.serial.toLowerCase(),'machine serial');dup(D.products.filter(p=>p.active!==false),p=>p.code&&p.code.toLowerCase(),'product code');
+ (await stockLevels()).forEach(x=>{if(x.q<0)E.push('Negative stock: '+x.p.name)});
+ D.vouchers.forEach(v=>{const e=chk(v.lines);if(e)E.push('Voucher '+v.number+': '+e)});
+ const b=bals(D.vouchers);if(r2(Object.values(b).reduce((s,x)=>s+x,0))!==0)E.push('Trial balance does not agree');
+ return E}
+async function backupView(m){
+ const h=(await getAll('backups')).sort((a,b)=>b.at.localeCompare(a.at)),ex=h.filter(b=>b.kind==='export'),last=ex[0],snaps=h.filter(b=>b.kind==='auto'||b.kind==='prerestore'),ago=last?Math.floor((Date.now()-new Date(last.at))/864e5):0;
+ m.innerHTML=`<div class="alert ${last&&ago<1?'ok':''}">${last?'Last backup file: '+new Date(last.at).toLocaleString()+' ('+(ago<1?'today':ago+' day(s) ago')+'). Saved to: '+esc((last.dest||[]).join(', ')||'not marked')+'.'+((last.dest||[]).length<2?' Save a second copy in another location.':''):'No backup file has been created yet.'}</div>
+ <div class="card"><h2>Create backup</h2><button class="btn" id="bs">Save / share backup file</button><button class="btn alt" id="bd">Download backup file</button><p style="font-size:13px;color:var(--mut)">Save / share opens the iPhone share sheet, where you can choose Save to Files or Google Drive. Each file has its own date and time in its name, so an earlier backup is never overwritten.</p><div id="bres"></div></div>
+ <div class="card"><h2>Restore</h2><input type="file" id="fl" accept=".json,application/json"><div id="rr" style="margin-top:10px"></div></div>
+ <div class="card"><h2>Automatic safety copies</h2><p style="font-size:13px;color:var(--mut);margin-top:0">When you unlock the app, a copy is prepared inside the app once a day (last 3 kept), and a copy is also made just before any restore. They live on this phone, so they do not protect you if the phone is lost or Safari data is cleared. Keep saving backup files too.</p>${snaps.map(s=>`<div style="border-top:1px solid var(--bd);padding:8px 0"><small>${s.kind==='auto'?'Automatic':'Before restore'} · ${new Date(s.at).toLocaleString()} · ${Math.round(s.size/1024)} KB</small><div class="grid"><button class="btn alt" data-r="${s.id}" style="margin-top:6px">Restore</button><button class="btn alt" data-d="${s.id}" style="margin-top:6px">Download</button></div></div>`).join('')||'<p>None yet.</p>'}</div>
+ <div class="card"><h2>Data integrity check</h2><button class="btn alt" id="ic">Run check</button><div id="icr"></div></div>
+ <div class="card"><h2>Export data</h2><p style="font-size:13px;color:var(--mut);margin-top:0">The backup file above is a complete export of everything (JSON). For spreadsheets, export one table at a time as CSV.</p><select id="et">${EXPT.map(([k,l])=>`<option value="${k}">${l}</option>`).join('')}</select><button class="btn alt" id="ec">Download CSV</button></div>
+ <div class="card"><h2>How to keep copies in several places</h2><p style="font-size:14px;margin:0">1. Tap Save / share, choose Save to Files, then pick iCloud Drive.<br>2. Tap Save / share again for the same data, or share the saved file from Files, and choose Google Drive (install the Drive app first).<br>3. Mark each place below the button so the history shows it.<br>The app cannot copy to cloud storage by itself. You do each save.</p></div>
+ <div class="card"><h2>Backup history</h2><div class="scroll"><table><tr><th>When</th><th>Type</th><th>File</th><th>Saved to</th></tr>${h.slice(0,15).map(b=>`<tr><td>${new Date(b.at).toLocaleString()}</td><td>${b.kind}</td><td>${esc(b.file||'')}<br><small>${b.size?Math.round(b.size/1024)+' KB':''} ${b.sum?'· '+b.sum:''} · v${esc(b.version||'')}</small></td><td>${esc((b.dest||[]).join(', '))}</td></tr>`).join('')||'<tr><td colspan=4>No history</td></tr>'}</table></div></div>`;
+ const bad=t=>$('#bres').innerHTML='<div class="alert bad">'+t+'</div>';
+ const mk=async mode=>{try{const txt=await buildBackup(),o=await verify(txt),name='bioniks-erp-backup-'+new Date().toISOString().replace(/[:T]/g,'-').slice(0,19)+'.json';
+  if(mode==='share'){const file=new File([txt],name,{type:'application/json'});let ok=false;if(navigator.canShare&&navigator.canShare({files:[file]})){try{await navigator.share({files:[file],title:name});ok=true}catch(e){if(e.name==='AbortError')return bad('Cancelled. No backup was recorded.')}}if(!ok)dl(txt,name,'application/json')}else dl(txt,name,'application/json');
+  const rec={at:new Date().toISOString(),kind:'export',file:name,size:txt.length,verified:true,version:APP_VERSION,dbVersion:DB_VERSION,sum:o.checksum.slice(0,8),dest:[]};rec.id=await putOne('backups',rec);await audit('BACKUP_CREATED',name);
+  $('#bres').innerHTML='<div class="alert ok">Backup created and verified: '+esc(name)+' ('+Math.round(txt.length/1024)+' KB, checksum '+rec.sum+'). Make sure it is saved, then mark where:</div><div id="dst"></div>';
+  const mark=()=>{$('#dst').innerHTML=DEST.map(d=>`<button class="btn ${rec.dest.includes(d)?'':'alt'}" data-d="${d}" style="margin-top:6px">${rec.dest.includes(d)?'✓ ':''}${d}</button>`).join('');document.querySelectorAll('#dst [data-d]').forEach(b=>b.onclick=async()=>{const d=b.dataset.d;rec.dest=rec.dest.includes(d)?rec.dest.filter(x=>x!==d):[...rec.dest,d];await putOne('backups',rec);mark()})};mark()
+ }catch(e){bad(esc(e.message))}};
+ $('#bs').onclick=()=>mk('share');$('#bd').onclick=()=>mk('dl');
+ $('#fl').onchange=async e=>{const f=e.target.files[0];if(f)restoreFlow(await f.text(),f.name)};
+ document.querySelectorAll('[data-r]').forEach(b=>b.onclick=()=>restoreFlow(snaps.find(s=>String(s.id)===b.dataset.r).data,'safety copy'));
+ document.querySelectorAll('#main [data-d].btn.alt').forEach(b=>{if(b.closest('#dst'))return;b.onclick=()=>{const s=snaps.find(x=>String(x.id)===b.dataset.d);if(s)dl(s.data,'bioniks-erp-safety-copy-'+s.at.slice(0,19).replace(/[:T]/g,'-')+'.json','application/json')}});
+ $('#ic').onclick=async()=>{const E=await integrity();$('#icr').innerHTML=E.length?'<div class="alert bad">'+E.length+' issue(s):<br>'+E.slice(0,30).map(esc).join('<br>')+'</div>':'<div class="alert ok">No problems found.</div>';await audit('INTEGRITY_CHECK',E.length+' issues')};
+ $('#ec').onclick=async()=>{const n=$('#et').value;dl(await csvOf(n),'bioniks-'+n+'-'+tdy()+'.csv','text/csv');await audit('CSV_EXPORT',n)}}
+async function restoreFlow(txt,label){
+ const box=$('#rr');let o;try{o=await verify(txt);if(!(o.data.settings||[]).some(s=>s.key==='company'))throw new Error('Backup has no company settings.')}catch(err){box.innerHTML='<div class="alert bad">'+esc(err.message)+'</div>';return}
+ const cur={};for(const n of STORES)if(n!=='backups')cur[n]=(await getAll(n)).length;
+ const rows=Object.keys(o.data).filter(n=>o.data[n].length||cur[n]).map(n=>`<tr><td>${n}</td><td>${o.data[n].length}</td><td>${cur[n]||0}</td></tr>`).join('');
+ box.innerHTML=`<div class="alert ok">Valid backup from ${new Date(o.created).toLocaleString()} (app ${esc(o.appVersion)}, checksum OK).</div><div class="scroll"><table><tr><th>Records</th><th>In backup</th><th>Now</th></tr>${rows}</table></div><div class="alert bad" style="margin-top:10px">Restoring replaces ALL current data, including the PIN, with the backup. A safety copy of your current data is kept first.</div>${field('rc','Type RESTORE to confirm','')}<div id="rm"></div><button class="btn" id="rgo">Restore now</button>`;
+ $('#rgo').onclick=async()=>{if($('#rc').value.trim()!=='RESTORE')return $('#rm').innerHTML='<div class="alert bad">Type RESTORE exactly to continue.</div>';
+  try{const pre=await buildBackup();await putOne('backups',{at:new Date().toISOString(),kind:'prerestore',file:'before restore',size:pre.length,verified:true,version:APP_VERSION,data:pre});await pruneKind('prerestore',2);
+   await restoreAll(o);for(const [k,,p] of DOCS){if(!await getOne('counters',k))await putOne('counters',{key:k,prefix:p+'-',next:1,padding:4})}
+   await putOne('backups',{at:new Date().toISOString(),kind:'restore',file:label,verified:true,version:o.appVersion});await audit('RESTORE',label);
+   box.innerHTML='<div class="alert ok">Restore complete. Unlocking again with the PIN from the backup.</div>';setTimeout(()=>{unlocked=false;login()},1500)
+  }catch(err){$('#rm').innerHTML='<div class="alert bad">Restore failed: '+esc(err.message)+'. Your data was not changed.</div>'}}}
+async function grnDoc(m,id){
+ const [p,co,ss,ps]=await Promise.all([getOne('purchases',id),getOne('settings','company'),getAll('suppliers'),getAll('products')]),s=ss.find(x=>x.id===p.supplierId)||{},pn=Object.fromEntries(ps.map(x=>[x.id,x.name]));
+ if(!p.grn){p.grn=await nextNo('grn');p.grnDate=tdy();await putOne('purchases',p)}
+ m.innerHTML=`<div class="card"><div style="text-align:center"><b style="font-size:18px">${esc(co.name)}</b><br>${esc(co.address)}</div><h2 style="text-align:center;margin-top:12px">GOODS RECEIPT NOTE</h2><p style="font-size:14px"><b>${esc(p.grn)}</b> \u00b7 ${p.grnDate}<br>Supplier: <b>${esc(s.name)}</b> ${esc(s.address)}<br>Supplier invoice: ${esc(p.supplierInvoiceNo)} (${p.date})<br>Our ref: ${esc(p.number)}${p.status==='cancelled'?' \u00b7 <b>PURCHASE CANCELLED</b>':''}</p><div class="scroll"><table><tr><th>Item</th><th>Qty received</th><th>Serial numbers</th></tr>${p.lines.map(l=>`<tr><td>${esc(pn[l.productId])}</td><td>${l.qty}</td><td>${esc((l.serials||[]).join(', '))}</td></tr>`).join('')}</table></div><p style="font-size:13px">Condition / remarks: ______________________</p><table style="margin-top:22px"><tr><td style="border:0">Received by<br><br>________________</td><td style="border:0;text-align:right">Checked by<br><br>________________</td></tr></table><div class="noprint"><button class="btn" id="pr">Print / Save as PDF</button><button class="btn alt" id="bk">Back</button></div></div>`;
+ $('#pr').onclick=()=>{try{window.print()}catch(e){}};$('#bk').onclick=()=>purchases(m,id)}
+async function dnDoc(m,kind,id){
+ const sale=kind==='sale',svc=kind==='service',st=sale?'invoices':svc?'services':'rentals',[d,co,cs,ms,ps]=await Promise.all([getOne(st,id),getOne('settings','company'),getAll('customers'),getAll('machines'),getAll('products')]),cu=cs.find(c=>c.id===d.customerId)||{},pn=Object.fromEntries(ps.map(x=>[x.id,x.name]));
+ if(!d.dn){d.dn=await nextNo('delivery_note');d.dnDate=tdy();await putOne(st,d)}
+ const mc=ms.find(x=>x.id===d.machineId)||{},rows=sale?d.lines.map(l=>[l.name,l.qty,(l.serials||[]).join(', ')]):svc?[[(d.model||'Machine')+' (service '+d.number+')',1,d.serialText||mc.serial||'']]:[[pn[mc.productId]||'Rental equipment',1,mc.serial||'']];
+ m.innerHTML=`<div class="card"><div style="text-align:center"><b style="font-size:18px">${esc(co.name)}</b><br>${esc(co.address)}<br>${esc(co.phone)}</div><h2 style="text-align:center;margin-top:12px">DELIVERY NOTE</h2><p style="font-size:14px"><b>${esc(d.dn)}</b> \u00b7 ${d.dnDate}<br>${sale?'Invoice':svc?'Service order':'Rental agreement'}: ${esc(d.number)}<br>Deliver to: <b>${esc(cu.name)}</b><br>${esc(cu.address)} ${esc(cu.district)}<br>Phone: ${esc(cu.mobile)}</p><div class="scroll"><table><tr><th>Item</th><th>Qty</th><th>Serial no.</th></tr>${rows.map(r=>`<tr><td>${esc(r[0])}</td><td>${r[1]}</td><td>${esc(r[2])}</td></tr>`).join('')}</table></div><p style="font-size:13px">Condition on delivery / remarks: ______________________</p><table style="margin-top:22px"><tr><td style="border:0">Delivered by<br><br>________________</td><td style="border:0;text-align:right">Received by (name, signature, date)<br><br>________________</td></tr></table><div class="noprint"><button class="btn" id="pr">Print / Save as PDF</button><button class="btn alt" id="bk">Back</button></div></div>`;
+ $('#pr').onclick=()=>{try{window.print()}catch(e){}};$('#bk').onclick=()=>sale?saleDoc(m,id):svc?svcDoc(m,id):rentDoc(m,id)}
+async function serialView(m){
+ const [us,ms,ps,inv,pu,cs,rs,sv]=await Promise.all(['units','machines','products','invoices','purchases','customers','rentals','services'].map(getAll)),pn=Object.fromEntries(ps.map(p=>[p.id,p.name])),cn=Object.fromEntries(cs.map(c=>[c.id,c.name])),T=ps.filter(p=>p.active!==false&&p.serialTracked&&p.kind==='sale');
+ m.innerHTML=`<div class="card"><h2>Find serial number</h2>${field('q_s','Serial number (part is fine)','')}<div id="res"></div></div><div class="card"><h2>Add serials for stock you already hold</h2><p style="font-size:13px;color:var(--mut);margin-top:0">For items bought before serial tracking. This does not change the stock quantity.</p>${T.length?`<select id="a_p">${T.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select><label>Serial numbers (one per line)</label><textarea id="a_t" rows="4"></textarea><div id="amsg"></div><button class="btn" id="a_s">Add serials</button>`:'<p style="font-size:14px">Turn on Track serial numbers for a saleable product first.</p>'}</div>`;
+ const show=()=>{const q=$('#q_s').value.trim().toLowerCase();if(!q){$('#res').innerHTML='';return}const rows=[];
+  us.filter(u=>u.serial.toLowerCase().includes(q)&&u.status!=='void').forEach(u=>{const s=inv.find(i=>i.id===u.saleId),p=pu.find(x=>x.id===u.purchaseId);rows.push(`<div class="card"><b>${esc(u.serial)}</b> \u00b7 ${esc(pn[u.productId])}<br><small>${u.status==='instock'?'In stock':u.status==='sold'?'Sold to '+esc(cn[u.customerId])+' on '+esc(u.soldAt||'')+' ('+esc(s&&s.number)+')':esc(u.status)}${p?' \u00b7 bought on '+esc(p.number):''}</small>${u.status==='instock'?`<button class="btn alt" data-w="${u.id}" style="margin-top:8px">Write off (damaged or lost)</button>`:''}</div>`)});
+  ms.filter(x=>x.serial.toLowerCase().includes(q)&&x.active!==false).forEach(x=>{const h=rs.filter(r=>r.machineId===x.id).map(r=>esc(r.number)+' '+esc(cn[r.customerId])+' ('+r.status+')').join('; ');rows.push(`<div class="card"><b>${esc(x.serial)}</b> \u00b7 ${esc(pn[x.productId])} (rental machine)<br><small>${MS[x.status]}${h?' \u00b7 Rentals: '+h:''}</small></div>`)});
+  sv.filter(s=>(s.serialText||'').toLowerCase().includes(q)).forEach(s=>rows.push(`<div class="card"><small>Service ${esc(s.number)} for ${esc(cn[s.customerId])}: ${esc(s.complaint)} (${SS[s.status]})</small></div>`));
+  $('#res').innerHTML=rows.join('')||'<p>No match.</p>';
+  document.querySelectorAll('[data-w]').forEach(b=>b.onclick=async()=>{const u=us.find(x=>x.id===b.dataset.w);if(!confirm('Write off '+u.serial+'? Stock goes down by 1.'))return;await atomic([['units',{...u,status:'writtenoff'}],['stock',{id:crypto.randomUUID(),productId:u.productId,date:tdy(),at:new Date().toISOString(),qty:-1,type:'damaged',ref:u.serial,note:'Written off'}]]);await audit('SERIAL_WRITTEN_OFF',u.serial);serialView(m)})};
+ $('#q_s').oninput=show;
+ if($('#a_s'))$('#a_s').onclick=async()=>{const bad=t=>$('#amsg').innerHTML='<div class="alert bad">'+t+'</div>',a=$('#a_t').value.split(/[\n,;]+/).map(x=>x.trim()).filter(Boolean),pid=$('#a_p').value;
+  if(!a.length)return bad('Enter at least one serial number.');
+  const lv=(await stockLevels()).find(x=>x.p.id===pid),have=us.filter(u=>u.productId===pid&&u.status==='instock').length;
+  if(lv&&have+a.length>lv.q)return bad('Stock is '+lv.q+' and '+have+' serial(s) are already recorded, so you can add at most '+(lv.q-have)+'.');
+  const taken=new Set([...us.filter(u=>u.status!=='void').map(u=>u.serial.toLowerCase()),...ms.filter(x=>x.active!==false).map(x=>x.serial.toLowerCase())]),seen=new Set();
+  for(const s of a){const k=s.toLowerCase();if(taken.has(k)||seen.has(k))return bad('Serial '+esc(s)+' already exists.');seen.add(k)}
+  await atomic(a.map(s=>['units',{id:crypto.randomUUID(),serial:s,productId:pid,status:'instock',purchaseId:null,createdAt:new Date().toISOString()}]));await audit('SERIALS_ADDED',a.length+' for '+pn[pid]);serialView(m)}}
+async function rnDoc(m,id){
+ const [s,co,cs,ms]=await Promise.all([getOne('services',id),getOne('settings','company'),getAll('customers'),getAll('machines')]),cu=cs.find(c=>c.id===s.customerId)||{},mc=ms.find(x=>x.id===s.machineId)||{};
+ if(!s.rn){s.rn=await nextNo('receipt_note');s.rnDate=s.date;await putOne('services',s)}
+ m.innerHTML=`<div class="card"><div style="text-align:center"><b style="font-size:18px">${esc(co.name)}</b><br>${esc(co.address)}<br>${esc(co.phone)}</div><h2 style="text-align:center;margin-top:12px">MACHINE RECEIPT NOTE</h2><p style="font-size:14px"><b>${esc(s.rn)}</b> \u00b7 ${s.rnDate}<br>Service order: ${esc(s.number)}<br>Received from: <b>${esc(cu.name)}</b><br>${esc(cu.address)} ${esc(cu.district)}<br>Phone: ${esc(cu.mobile)}</p><div class="scroll"><table><tr><th>Machine</th><th>Serial no.</th><th>Warranty</th></tr><tr><td>${esc(s.model||'')}</td><td><b>${esc(s.serialText||mc.serial||'')}</b></td><td>${esc(s.warranty||'unknown')}</td></tr></table></div><p style="font-size:14px">Complaint: ${esc(s.complaint)}<br>Accessories received: ${esc(s.accessories||'None')}<br>Condition on receipt: ${esc(s.conditionIn||'-')}</p><p style="font-size:13px">Machine received for inspection and repair as described above.</p><table style="margin-top:22px"><tr><td style="border:0">Received by<br><br>________________</td><td style="border:0;text-align:right">Customer signature<br><br>________________</td></tr></table><div class="noprint"><button class="btn" id="pr">Print / Save as PDF</button><button class="btn alt" id="bk">Back</button></div></div>`;
+ $('#pr').onclick=()=>{try{window.print()}catch(e){}};$('#bk').onclick=()=>svcDoc(m,id)}
+async function wdnDoc(m,id){
+ const [s,co,cs,us,inv]=await Promise.all([getOne('services',id),getOne('settings','company'),getAll('customers'),getAll('units'),getAll('invoices')]),cu=cs.find(c=>c.id===s.customerId)||{},u=us.find(x=>x.status==='sold'&&x.serial===s.serialText),i=u&&inv.find(x=>x.id===u.saleId),c=s.company;
+ m.innerHTML=`<div class="card"><div style="text-align:center"><b style="font-size:18px">${esc(co.name)}</b><br>${esc(co.address)}<br>${co.gstin?'GSTIN: '+esc(co.gstin):''} ${esc(co.phone)}</div><h2 style="text-align:center;margin-top:12px">DELIVERY NOTE</h2><p style="text-align:center;margin:0;font-size:13px">Machine sent for warranty repair or replacement</p><p style="font-size:14px"><b>${esc(c.dn)}</b> \u00b7 ${c.sentDate}<br>To: <b>${esc(c.name)}</b>${c.ref?'<br>Your reference: '+esc(c.ref):''}<br>Our service order: ${esc(s.number)} (receipt note ${esc(s.rn||'-')})</p><div class="scroll"><table><tr><th>Machine</th><th>Serial no.</th><th>Warranty</th></tr><tr><td>${esc(s.model||'')}</td><td><b>${esc(s.serialText||'')}</b></td><td>${esc(s.warranty||'unknown')}</td></tr></table></div><p style="font-size:14px">Complaint: ${esc(s.complaint)}<br>Accessories sent: ${esc(s.accessories||'None')}<br>End customer: ${esc(cu.name)}${i?'<br>Sold by us on '+esc(u.soldAt)+', invoice '+esc(i.number):''}${c.notes?'<br>Notes: '+esc(c.notes):''}</p><table style="margin-top:22px"><tr><td style="border:0">Sent by<br><br>________________</td><td style="border:0;text-align:right">Received by (name, signature, date)<br><br>________________</td></tr></table><div class="noprint"><button class="btn" id="pr">Print / Save as PDF</button><button class="btn alt" id="bk">Back</button></div></div>`;
+ $('#pr').onclick=()=>{try{window.print()}catch(e){}};$('#bk').onclick=()=>svcDoc(m,id)}
+if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}))}
+if(navigator.storage&&navigator.storage.persist){navigator.storage.persist().catch(()=>{})}
+boot();
+</script></body></html>
